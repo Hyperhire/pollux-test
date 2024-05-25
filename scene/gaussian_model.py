@@ -551,6 +551,12 @@ class GaussianModel:
             _, _, inMask, outView = world2scrn(self._xyz.detach(), c, pad)
             visible = inMask.all(0) * ~(outView.all(0))
             self.prune_points(~visible)
+    
+    def seg_mask_prune(self, cams, pad=4):
+        _, _, inMask, outView = world2scrn(self._xyz.detach(), cams, pad)
+        visible = inMask.all(0) * ~(outView.all(0))
+        print(visible)
+        # self.prune_points(~visible)
 
     def to_occ_grid(self, cutoff, grid_dim_max=512, bound_overwrite=None):
         if bound_overwrite is None:

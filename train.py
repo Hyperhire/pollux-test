@@ -38,6 +38,9 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
     gaussians = GaussianModel(dataset)
     scene = Scene(dataset, gaussians, opt.camera_lr, shuffle=False, resolution_scales=[1, 2, 4])
     use_mask = dataset.use_mask
+
+    print(f"use_mask : {use_mask}")
+
     gaussians.training_setup(opt)
     if checkpoint:
         (model_params, first_iter) = torch.load(checkpoint)
@@ -83,6 +86,9 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             viewpoint_stack = scene.getTrainCameras(scale).copy()[:]
         viewpoint_cam = viewpoint_stack.pop(randint(0, len(viewpoint_stack) - 1))
         # viewpoint_cam = scene.getTrainCameras(scale)[0]
+
+        # Visible
+        gaussians.seg_mask_prune(viewpoint_cam, 4)
 
         # Render
         if (iteration - 1) == debug_from:
