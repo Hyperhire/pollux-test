@@ -22,7 +22,7 @@ from simple_knn._C import distCUDA2
 # from scene.colmap_loader import qvec2rotmat
 from utils.general_utils import quaternion2rotmat
 from utils.graphics_utils import BasicPointCloud
-from utils.image_utils import world2scrn
+from utils.image_utils import world2scrn, world2scrn_two
 from utils.general_utils import strip_symmetric, build_scaling_rotation
 
 class GaussianModel:
@@ -482,12 +482,15 @@ class GaussianModel:
 
         self.densification_postfix(new_xyz, new_features_dc, new_features_rest, new_opacities, new_scaling, new_rotation)
 
-    def adaptive_prune(self, min_opacity, extent):
+    def adaptive_prune(self, min_opacity, extent, mask_valid):
 
         # print(sum(grad_rot > 1.2) / len(grad_rot))
         # print(sum(grad_pos > max_grad) / len(grad_pos), max_grad)
 
         n_ori = len(self._xyz)
+
+        # print(f"mask_valid : {mask_valid}")
+        # print(f"mask_valid : {mask_valid.shape}")
 
         # prune
         # prune_mask = 
@@ -504,7 +507,7 @@ class GaussianModel:
         # print(prune_scale.sum())
         
         prune_vis = (self.denom == 0).squeeze()
-        prune = prune_opac + prune_vis + prune_scale
+        prune = prune_opac + prune_vis + prune_scale + ~mask_valid
         self.prune_points(prune)
         # print(f'opac:{prune_opac.sum()}, scale:{prune_scale.sum()}, vis:{prune_vis.sum()} extend:{extent}')
         # print(f'prune: {n_ori}-->{len(self._xyz)}')
@@ -553,10 +556,10 @@ class GaussianModel:
             self.prune_points(~visible)
     
     def seg_mask_prune(self, cams, pad=4):
-        _, _, inMask, outView = world2scrn(self._xyz.detach(), cams, pad)
+        _, _, inMask, outView, scrPos = world2scrn_two(self._xyz.detach(), cams, pad)
         visible = inMask.all(0) * ~(outView.all(0))
-        print(visible)
-        # self.prune_points(~visible)
+        
+        return visible, scrPos
 
     def to_occ_grid(self, cutoff, grid_dim_max=512, bound_overwrite=None):
         if bound_overwrite is None:

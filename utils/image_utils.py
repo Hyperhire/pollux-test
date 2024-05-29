@@ -326,6 +326,51 @@ def world2scrn(xyz, cams, pad):
 
     return camPos, ndc, inMask, outView
 
+def world2scrn_two(xyz, cams, pad):
+    utils_mod = load(name="cuda_utils", sources=["utils/ext.cpp", "utils/cuda_utils.cu"])
+    device = xyz.device
+    mask = [i.get_gtMask().to(device).to(torch.float32) for i in cams]
+    mask = [i + utils_mod.contour_padding(i, i.to(torch.bool), pad) for i in mask]
+    mask = torch.cat(mask, 0)
+
+    worldPos = xyz#.detach()
+    worldPos = torch.cat([worldPos, torch.ones_like(worldPos[:, :1])], 1)[None, :, None]
+    
+    view_mat = torch.cat([i.world_view_transform[None] for i in cams], 0).to(device)[:, None]
+    z_near = torch.cat([torch.tensor([[i.znear]]) for i in cams], 0).to(device)
+    z_far = torch.cat([torch.tensor([[i.zfar]]) for i in cams], 0).to(device)
+
+    camPos = (worldPos @ view_mat[..., :3]).squeeze()
+    outViewZ = torch.le(camPos[..., 2], z_near) + torch.gt(camPos[..., 2], z_far)
+
+    prj_mat = torch.cat([i.full_proj_transform[None] for i in cams], 0).to(device)[:, None]
+    projPos = (worldPos @ prj_mat).squeeze()
+    projPos = projPos[..., :3] / (projPos[..., 3:] + 1e-7)
+
+    outViewX = torch.le(projPos[..., 0], -1) + torch.gt(projPos[..., 0], 1)
+    outViewY = torch.le(projPos[..., 1], -1) + torch.gt(projPos[..., 1], 1)
+    outView = outViewX + outViewY + outViewZ
+    # outAllView = torch.all(outView, dim=0)
+
+    reso = torch.cat([torch.tensor([[[i.image_width, i.image_height]]]) for i in cams], 0).to(device)
+    prcp = torch.cat([i.prcppoint[None] for i in cams], 0).to(device)[:, None]
+
+    scrnPos = ((projPos[..., :2] + 1) * reso - 1) * 0.5 + reso * (prcp - 0.5)
+    ndc = (scrnPos / reso) * 2 - 1
+
+    scrnPos = torch.clip(scrnPos, torch.zeros_like(reso), reso - 1).to(torch.long)
+
+    mask_idx = torch.arange(0, len(mask))[:, None].to(torch.long)
+
+    if mask.mean() == 1:
+        inMask = torch.ones_like(outView).to(torch.bool)
+    else:
+        inMask = mask.permute([0, 2, 1])[mask_idx, scrnPos[..., 0], scrnPos[..., 1]].to(torch.bool)
+    # inMaskOrOutView = torch.all(inMask + outView, dim=0)
+    # inMaskOrOutView = torch.all(inMask, dim=0)
+    
+    return camPos, ndc, inMask, outView, scrnPos
+
 def resample_points(camera, depth, normal, color, mask):
     camWPos = depth2wpos(depth, mask, camera).permute([1, 2, 0])
     camN = normal.permute([1, 2, 0])
