@@ -482,7 +482,11 @@ class GaussianModel:
 
         self.densification_postfix(new_xyz, new_features_dc, new_features_rest, new_opacities, new_scaling, new_rotation)
 
-    def adaptive_prune(self, min_opacity, extent, mask_valid):
+    def visibility_prune(self, mask_valid):
+        prune = ~mask_valid
+        self.prune_points(prune)
+
+    def adaptive_prune_modified(self, min_opacity, extent, mask_valid):
 
         # print(sum(grad_rot > 1.2) / len(grad_rot))
         # print(sum(grad_pos > max_grad) / len(grad_pos), max_grad)
@@ -508,9 +512,47 @@ class GaussianModel:
         
         prune_vis = (self.denom == 0).squeeze()
         prune = prune_opac + prune_vis + prune_scale + ~mask_valid
+        # prune = prune_opac + prune_vis + prune_scale
         self.prune_points(prune)
         # print(f'opac:{prune_opac.sum()}, scale:{prune_scale.sum()}, vis:{prune_vis.sum()} extend:{extent}')
         # print(f'prune: {n_ori}-->{len(self._xyz)}')
+
+    def adaptive_prune(self, min_opacity, extent):
+        # https://github.com/turandai/gaussian_surfels/blob/main/scene/gaussian_model.py#L485C1-L510C54
+        # print(sum(grad_rot > 1.2) / len(grad_rot))
+        # print(sum(grad_pos > max_grad) / len(grad_pos), max_grad)
+
+        n_ori = len(self._xyz)
+
+        # prune
+        # prune_mask = 
+        # opac_thrsh = torch.tensor([min_opacity, 1])
+        opac_temp = self.get_opacity
+        prune_opac =  (opac_temp < min_opacity).squeeze()
+        # prune_opac += (opac_temp > opac_thrsh[1]).squeeze()
+
+        # scale_thrsh = torch.tensor([2e-4, 0.1]) * extent
+        scale_min = self.get_scaling[:, :2].min(1).values
+        scale_max = self.get_scaling[:, :2].max(1).values
+        prune_scale = scale_max > 0.5 * extent
+        prune_scale += (scale_min * scale_max) < (1e-8 * extent**2)
+        # print(prune_scale.sum())
+        
+        prune_vis = (self.denom == 0).squeeze()
+        prune = prune_opac + prune_vis + prune_scale
+        self.prune_points(prune)
+        # print(f'opac:{prune_opac.sum()}, scale:{prune_scale.sum()}, vis:{prune_vis.sum()} extend:{extent}')
+        # print(f'prune: {n_ori}-->{len(self._xyz)}')
+
+    def adaptive_densify_without_clone_and_split(self, max_grad, extent):
+        grad_pos = self.xyz_gradient_accum / self.denom
+        grad_scale = self.scale_gradient_accum /self.denom
+        grad_rot = self.rot_gradient_accum /self.denom
+        grad_opac = self.opac_gradient_accum /self.denom
+        grad_pos[grad_pos.isnan()] = 0.0
+        grad_scale[grad_scale.isnan()] = 0.0
+        grad_rot[grad_rot.isnan()] = 0.0
+        grad_opac[grad_opac.isnan()] = 0.0
 
     def adaptive_densify(self, max_grad, extent):
         grad_pos = self.xyz_gradient_accum / self.denom

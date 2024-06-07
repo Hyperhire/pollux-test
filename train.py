@@ -34,14 +34,31 @@ except ImportError:
     TENSORBOARD_FOUND = False
 
 # =========== ljw ===========
-from utils.pollux_utils import load_mask_image
+from utils.pollux_utils import load_mask_image, load_dilated_mask_image
+import yaml
+import torch.nn.functional as F
+from datetime import datetime as dt
+# =========== lsj ===========
+
 
 def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoint_iterations, checkpoint, debug_from):
+
+    config = args.config
+    cfg = yaml.safe_load(open(config))
+    pad = cfg['param']['pad']
+
     first_iter = 0
-    tb_writer = prepare_output_and_logger(dataset)
+    tb_writer, unique_str, save_path = prepare_output_and_logger(dataset, args.exp_id)
     gaussians = GaussianModel(dataset)
     scene = Scene(dataset, gaussians, opt.camera_lr, shuffle=False, resolution_scales=[1, 2, 4])
     use_mask = dataset.use_mask
+
+    current_datetime = dt.now().strftime('%Y-%m-%d %H:%M:%S')
+    cfg['log']['last_train_id'] = unique_str
+    cfg['log']['datetime'] = current_datetime
+    cfg['log']['saved_path'] = save_path
+    with open(config, 'w') as file:
+        yaml.dump(cfg, file, default_flow_style=False)
 
     gaussians.training_setup(opt)
     if checkpoint:
@@ -59,6 +76,29 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
     iter_end = torch.cuda.Event(enable_timing = True)
     pool = torch.nn.MaxPool2d(9, stride=1, padding=4)
 
+    ##==============================================================================
+    ## Prepare dilated mask dictionary per scale
+    #dilated_mask_per_scale = {
+    #    '1': {},
+    #    '2': {},
+    #    '4': {},
+    #}
+    #for scale in dilated_mask_per_scale.keys():
+    #    print(f"dilated_mask processing start at scale = {scale}")
+    #    for iter in range(len(scene.getTrainCameras())):
+    #        scale_num = int(scale)
+    #        viewpoint_cam_temp = scene.getTrainCameras(scale_num)[iter]
+    #        dilated_mask = load_dilated_mask_image(mask_path=args.mask_path, iteration=viewpoint_cam_temp.image_name, resolution=scale_num)
+    #        dilated_mask_per_scale[f'{scale}'][viewpoint_cam_temp.image_name]=dilated_mask
+#
+    #        # visualization
+    #        # Squeeze the mask if it has a leading dimension of size 1
+    #        if dilated_mask.ndim == 3 and dilated_mask.shape[0] == 1:
+    #            dilated_mask = dilated_mask.squeeze(0)
+    #        plt.imshow(dilated_mask)
+    #        plt.savefig(f"./test/mask_{viewpoint_cam_temp.image_name}.png")
+    #        plt.close()
+    ##==============================================================================
 
     viewpoint_stack = None
     ema_loss_for_log = 0.0
@@ -88,6 +128,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             elif iteration - 1 >= 5000:
                 scale = 1
             viewpoint_stack = scene.getTrainCameras(scale).copy()[:]
+            data_len = len(viewpoint_stack)
         viewpoint_cam = viewpoint_stack.pop(randint(0, len(viewpoint_stack) - 1))
         # viewpoint_cam = scene.getTrainCameras(scale)[0]
 
@@ -106,6 +147,27 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
 
         mask_gt = viewpoint_cam.get_gtMask(use_mask)
         gt_image = viewpoint_cam.get_gtImage(background, use_mask)
+
+        #=========================================================================
+        #mask_gt and gt_image visualization
+        print(f"viewpoint_cam.image_name : {viewpoint_cam.image_name}")
+        print(f"mask_gt : {mask_gt}")
+        print(f"mask_gt shape : {mask_gt.shape}")
+        print(f"gt_image : {gt_image}")
+        print(f"gt_image shape : {gt_image.shape}")
+        # Transfer tensors to CPU
+        mask_gt_np = mask_gt.cpu().numpy()
+        mask_gt_np = mask_gt_np.squeeze()
+        gt_image_np = gt_image.cpu().numpy()
+        gt_image_np = np.transpose(gt_image_np, (1, 2, 0))
+        plt.imshow(mask_gt_np, cmap='gray')
+        plt.savefig(f"./test/masked_gt_{viewpoint_cam.image_name}.png")
+        plt.close()    
+        plt.imshow(gt_image_np)
+        plt.savefig(f"./test/gt_image{viewpoint_cam.image_name}.png")
+        plt.close()    
+        #=========================================================================
+
         mask_vis = (opac.detach() > 1e-5)
         normal = torch.nn.functional.normalize(normal, dim=0) * mask_vis
         d2n = depth2normal(depth, mask_vis, viewpoint_cam)
@@ -117,7 +179,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             # monoD_match, mask_match = match_depth(monoD, depth, mask_gt * mask_vis, 256, [viewpoint_cam.image_height, viewpoint_cam.image_width])
 
         # =========== visible gaussian points ===========
-        visible, scrPos = gaussians.seg_mask_prune([viewpoint_cam], 4)
+        visible, scrPos = gaussians.seg_mask_prune([viewpoint_cam], pad) # default pad : 4
 
         # print(f"scrPos : {scrPos.shape}")
         
@@ -140,7 +202,11 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         #     plt.savefig("./test/projected.png")
             
         # =========== SAM Mask ===========
-        SAM_mask = load_mask_image(args.mask_path, iteration=viewpoint_cam.image_name, resolution=scale)
+        #if iteration > 29000:
+        #    SAM_mask = load_dilated_mask_image(args.mask_path, iteration=viewpoint_cam.image_name, resolution=scale)
+        #else:
+        #    SAM_mask = load_mask_image(args.mask_path, iteration=viewpoint_cam.image_name, resolution=scale)
+        SAM_mask = dilated_mask_per_scale[str(scale)][viewpoint_cam.image_name] 
         SAM_mask = SAM_mask.cuda()
 
         image = image * SAM_mask
@@ -244,13 +310,92 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 gaussians.add_densification_stats(viewspace_point_tensor, visibility_filter)
                 min_opac = 0.1# if iteration <= opt.densify_from_iter else 0.1
                 # min_opac = 0.05 if iteration <= opt.densify_from_iter else 0.005
-                # if iteration % opt.pruning_interval == 0:
-                if iteration % opt.densification_interval == 0:
-                    gaussians.adaptive_prune(min_opac, scene.cameras_extent, mask_valid)
-                    gaussians.adaptive_densify(opt.densify_grad_threshold, scene.cameras_extent)
-                # TODO
-                
-                if (iteration - 1) % opt.opacity_reset_interval == 0 and opt.opacity_lr > 0:
+
+                # Binary_mask로 background random gaussian 삭제 
+                if iteration % opt.pruning_interval == 0 and iteration > 29000: # TODO : Visualization 함수 만들기
+                    #gaussians.adaptive_prune(min_opac, scene.cameras_extent) # Original code
+                    
+                    plt.clf()
+                    plt.imshow(image_np)
+                    plt.scatter(scrPos_np[mask_valid.cpu(), 0], scrPos_np[mask_valid.cpu(), 1], c='green', s=10, label='Inside SAM_mask')
+                    plt.scatter(scrPos_np[~mask_valid.cpu(), 0], scrPos_np[~mask_valid.cpu(), 1], c='red', s=10, label='Outside SAM_mask')
+                    plt.title("SAM Mask & Visible Points")
+                    # plt.legend()
+                    plt.savefig(f"./test/{iteration}_before_projected_with_sam_mask.png")
+
+                    gaussians.adaptive_prune_modified(min_opac, scene.cameras_extent, mask_valid) # Modified
+                    gaussians.adaptive_densify_without_clone_and_split(opt.densify_grad_threshold, scene.cameras_extent) # Modified
+
+                    # =======================================
+                    visible, scrPos = gaussians.seg_mask_prune([viewpoint_cam], pad) # default pad : 4
+
+                    # print(f"scrPos : {scrPos.shape}")
+                    
+                    indices = torch.nonzero(visible, as_tuple=True)[0]
+
+                    visible_mask = torch.zeros(scrPos.shape[1], dtype=torch.bool)
+                    visible_mask[indices] = True
+
+                    filtered_scrPos = torch.full_like(scrPos, -1)
+                    filtered_scrPos[:, visible_mask, :] = scrPos[:, visible_mask, :]
+
+                    # print(f"filtered_scrPos : {filtered_scrPos.shape}")
+
+                    scrPos_np = filtered_scrPos.cpu().numpy()[0]
+                    image_np = gt_image.cpu().numpy().transpose(1, 2, 0)
+
+                    # if iteration % 100 == 0:
+                    #     plt.imshow(image_np)
+                    #     plt.scatter(scrPos_np[:, 0], scrPos_np[:, 1], c='red', s=0.001)
+                    #     plt.savefig("./test/projected.png")
+                        
+                    # =========== SAM Mask ===========
+
+                    image = image * SAM_mask
+                    gt_image = gt_image * SAM_mask
+                    mask_gt = mask_gt * SAM_mask
+                    normal = normal * SAM_mask
+                    monoN = monoN * SAM_mask
+                    d2n = d2n * SAM_mask
+                    opac = opac * SAM_mask
+
+                    # =========== Visible points & SAM Mask ===========
+                    scrPos_np_int = scrPos_np.astype(int)
+
+                    # Create a Boolean tensor of the same shape as scrPos_np with default value True
+                    mask_valid = torch.ones(scrPos_np.shape[0], dtype=torch.bool).cuda()
+
+                    # Check the SAM_mask for each point in scrPos_np
+                    # Using vectorized operations for performance
+                    x_coords = scrPos_np_int[:, 0]
+                    y_coords = scrPos_np_int[:, 1]
+
+                    valid_x = (x_coords >= 0) & (x_coords < SAM_mask.shape[2])
+                    valid_y = (y_coords >= 0) & (y_coords < SAM_mask.shape[1])
+
+                    valid_coords = valid_x & valid_y
+
+                    x_coords = x_coords[valid_coords]
+                    y_coords = y_coords[valid_coords]
+                    indices = torch.arange(scrPos_np.shape[0], device='cuda')[valid_coords]
+
+                    mask_valid[indices] = SAM_mask[0, y_coords, x_coords] != 0
+                    # ================================================================================
+
+                    plt.clf()
+                    plt.imshow(image_np)
+                    plt.scatter(scrPos_np[mask_valid.cpu(), 0], scrPos_np[mask_valid.cpu(), 1], c='green', s=10, label='Inside SAM_mask')
+                    plt.scatter(scrPos_np[~mask_valid.cpu(), 0], scrPos_np[~mask_valid.cpu(), 1], c='red', s=10, label='Outside SAM_mask')
+                    plt.title("SAM Mask & Visible Points")
+                    # plt.legend()
+                    plt.savefig(f"./test/{iteration}_after_projected_with_sam_mask.png")
+
+                if iteration % opt.densification_interval == 0 and iteration < 29000:
+                    gaussians.adaptive_prune(min_opac, scene.cameras_extent) # Original code
+                    gaussians.adaptive_densify(opt.densify_grad_threshold, scene.cameras_extent) # Original code
+
+                # TODO : reset opacity interval 왜하는지 알아내기
+                if (iteration - 1) % opt.opacity_reset_interval == 0 and opt.opacity_lr > 0 and iteration < 29000:
                     gaussians.reset_opacity(0.12, iteration)
 
 
@@ -280,14 +425,14 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 torch.save((gaussians.capture(), iteration), scene.model_path + "/chkpnt" + str(iteration) + ".pth")
 
 
-def prepare_output_and_logger(args):    
+def prepare_output_and_logger(args, exp_id):    
     if not args.model_path:
         if os.getenv('OAR_JOB_ID'):
             unique_str=os.getenv('OAR_JOB_ID')
         else:
             unique_str = str(uuid.uuid4())
 
-        args.model_path = os.path.join("./output/test516", f"{args.source_path.split('/')[-1]}_{unique_str[0:10]}")
+        args.model_path = os.path.join("./output/test601", f"{args.source_path.split('/')[-1]}_{unique_str[0:10]+exp_id}")
         
         
     # Set up output folder
@@ -302,7 +447,7 @@ def prepare_output_and_logger(args):
         tb_writer = SummaryWriter(args.model_path)
     else:
         print("Tensorboard not available: not logging progress")
-    return tb_writer
+    return tb_writer, unique_str[0:10]+exp_id, args.model_path
 
 def training_report(tb_writer, iteration, Ll1, loss, l1_loss, elapsed, testing_iterations, scene : Scene, pipe, bg, use_mask):
     if tb_writer:
@@ -356,6 +501,11 @@ if __name__ == "__main__":
     parser.add_argument("--quiet", action="store_true")
     parser.add_argument("--checkpoint_iterations", nargs="+", type=int, default=[])
     parser.add_argument("--start_checkpoint", type=str, default = None)
+    
+    # ljw
+    parser.add_argument('--config', type=str, default='./config/train.yaml', help='Path to the configuration file')
+    parser.add_argument("--exp_id", type=str, default = "")
+    
     args = parser.parse_args(sys.argv[1:])
     args.save_iterations.append(args.iterations)
     print("Optimizing " + args.model_path)
