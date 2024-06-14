@@ -1,6 +1,6 @@
 log:
-  datetime: '2024-06-07 01:40:10'
-  last_train_id: 8cf03ff8-3gtmasked
-  saved_path: ./output/test601/jun232_black_8cf03ff8-3gtmasked
+  datetime: '2024-06-09 04:19:08'
+  last_train_id: f22a1af0-cpad16_scloss100_dim1_29700
+  saved_path: ./output/test608/white_background_ori_232_f22a1af0-cpad16_scloss100_dim1_29700
 param:
   pad: 15

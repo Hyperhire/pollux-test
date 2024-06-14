@@ -12,7 +12,7 @@
 import os
 import torch
 from random import randint
-from utils.loss_utils import l1_loss, ssim, cos_loss, bce_loss, knn_smooth_loss
+from utils.loss_utils import l1_loss, ssim, cos_loss, bce_loss, knn_smooth_loss, scale_loss
 from gaussian_renderer import render, network_gui
 import numpy as np
 import sys
@@ -39,7 +39,7 @@ import yaml
 import torch.nn.functional as F
 from datetime import datetime as dt
 # =========== lsj ===========
-
+use_scale_loss = 1
 
 def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoint_iterations, checkpoint, debug_from):
 
@@ -76,29 +76,28 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
     iter_end = torch.cuda.Event(enable_timing = True)
     pool = torch.nn.MaxPool2d(9, stride=1, padding=4)
 
-    ##==============================================================================
-    ## Prepare dilated mask dictionary per scale
-    #dilated_mask_per_scale = {
-    #    '1': {},
-    #    '2': {},
-    #    '4': {},
-    #}
-    #for scale in dilated_mask_per_scale.keys():
-    #    print(f"dilated_mask processing start at scale = {scale}")
-    #    for iter in range(len(scene.getTrainCameras())):
-    #        scale_num = int(scale)
-    #        viewpoint_cam_temp = scene.getTrainCameras(scale_num)[iter]
-    #        dilated_mask = load_dilated_mask_image(mask_path=args.mask_path, iteration=viewpoint_cam_temp.image_name, resolution=scale_num)
-    #        dilated_mask_per_scale[f'{scale}'][viewpoint_cam_temp.image_name]=dilated_mask
-#
-    #        # visualization
-    #        # Squeeze the mask if it has a leading dimension of size 1
-    #        if dilated_mask.ndim == 3 and dilated_mask.shape[0] == 1:
-    #            dilated_mask = dilated_mask.squeeze(0)
-    #        plt.imshow(dilated_mask)
-    #        plt.savefig(f"./test/mask_{viewpoint_cam_temp.image_name}.png")
-    #        plt.close()
-    ##==============================================================================
+    #=============== Prepare dilated mask dictionary per scale (ljw, lsj) ==================
+   
+    dilated_mask_per_scale = {
+        '1': {},
+        '2': {},
+        '4': {},
+    }
+    for scale in dilated_mask_per_scale.keys():
+        print(f"dilated_mask processing start at scale = {scale}")
+        for iter in range(len(scene.getTrainCameras())):
+            scale_num = int(scale)
+            viewpoint_cam_temp = scene.getTrainCameras(scale_num)[iter]
+            dilated_mask = load_dilated_mask_image(mask_path=args.mask_path, iteration=viewpoint_cam_temp.image_name, resolution=scale_num)
+            dilated_mask_per_scale[f'{scale}'][viewpoint_cam_temp.image_name]=dilated_mask
+            # visualization
+            # Squeeze the mask if it has a leading dimension of size 1
+            #if dilated_mask.ndim == 3 and dilated_mask.shape[0] == 1:
+            #    dilated_mask = dilated_mask.squeeze(0)
+            #plt.imshow(dilated_mask)
+            #plt.savefig(f"./test/mask_{viewpoint_cam_temp.image_name}.png")
+            #plt.close()
+    #=========================================================================================
 
     viewpoint_stack = None
     ema_loss_for_log = 0.0
@@ -145,39 +144,51 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg["radii"]
 
 
-        mask_gt = viewpoint_cam.get_gtMask(use_mask)
-        gt_image = viewpoint_cam.get_gtImage(background, use_mask)
+        mask_gt = viewpoint_cam.get_gtMask(use_mask) #Original code
 
-        #=========================================================================
-        #mask_gt and gt_image visualization
-        print(f"viewpoint_cam.image_name : {viewpoint_cam.image_name}")
-        print(f"mask_gt : {mask_gt}")
-        print(f"mask_gt shape : {mask_gt.shape}")
-        print(f"gt_image : {gt_image}")
-        print(f"gt_image shape : {gt_image.shape}")
-        # Transfer tensors to CPU
-        mask_gt_np = mask_gt.cpu().numpy()
-        mask_gt_np = mask_gt_np.squeeze()
-        gt_image_np = gt_image.cpu().numpy()
-        gt_image_np = np.transpose(gt_image_np, (1, 2, 0))
-        plt.imshow(mask_gt_np, cmap='gray')
-        plt.savefig(f"./test/masked_gt_{viewpoint_cam.image_name}.png")
-        plt.close()    
-        plt.imshow(gt_image_np)
-        plt.savefig(f"./test/gt_image{viewpoint_cam.image_name}.png")
-        plt.close()    
-        #=========================================================================
+        ##### mask_gt code ####
+        #mask_gt = dilated_mask_per_scale[str(scale)][viewpoint_cam.image_name]
+        ## Transfer to the GPU 
+        #mask_gt = mask_gt.float().cuda()
+        ## Apply pooling operation
+        #pool = torch.nn.MaxPool2d(kernel_size=1, stride=1, padding=0)  # Example parameters
+        #pooled_mask = pool(mask_gt)
 
+        gt_image = viewpoint_cam.get_gtImage(background, use_mask) #Original code
         mask_vis = (opac.detach() > 1e-5)
         normal = torch.nn.functional.normalize(normal, dim=0) * mask_vis
         d2n = depth2normal(depth, mask_vis, viewpoint_cam)
         mono = viewpoint_cam.mono if dataset.mono_normal else None
         if mono is not None:
-            mono *= mask_gt
+            #### mask_gt code ####
+            #mono = mono.cuda() 
+            #mono *= pooled_mask
+            mono *= mask_gt # Original code
             monoN = mono[:3]
             # monoD = mono[3:]
             # monoD_match, mask_match = match_depth(monoD, depth, mask_gt * mask_vis, 256, [viewpoint_cam.image_height, viewpoint_cam.image_width])
 
+        #=================== mask_gt and gt_image visualization (ljw, lsj)  ===============
+
+        #print(f"viewpoint_cam.image_name : {viewpoint_cam.image_name}")
+        #print(f"mask_gt : {mask_gt}")
+        #print(f"mask_gt shape : {mask_gt.shape}")
+        #print(f"gt_image : {gt_image}")
+        #print(f"gt_image shape : {gt_image.shape}")
+        ## Transfer tensors to CPU
+        #mask_gt_np = mask_gt.cpu().numpy()
+        #mask_gt_np = mask_gt_np.squeeze()
+        #gt_image_np = gt_image.cpu().numpy()
+        #gt_image_np = np.transpose(gt_image_np, (1, 2, 0))
+        #plt.imshow(mask_gt_np, cmap='gray')
+        #plt.savefig(f"./test/masked_gt_{viewpoint_cam.image_name}.png")
+        #plt.close()    
+        #plt.imshow(gt_image_np)
+        #plt.savefig(f"./test/gt_image{viewpoint_cam.image_name}.png")
+        #plt.close()    
+        ##==================================================================================
+
+        
         # =========== visible gaussian points ===========
         visible, scrPos = gaussians.seg_mask_prune([viewpoint_cam], pad) # default pad : 4
 
@@ -201,7 +212,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         #     plt.scatter(scrPos_np[:, 0], scrPos_np[:, 1], c='red', s=0.001)
         #     plt.savefig("./test/projected.png")
             
-        # =========== SAM Mask ===========
+        # =========== SAM Mask (ljw, lsj) ===========
         #if iteration > 29000:
         #    SAM_mask = load_dilated_mask_image(args.mask_path, iteration=viewpoint_cam.image_name, resolution=scale)
         #else:
@@ -211,13 +222,13 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
 
         image = image * SAM_mask
         gt_image = gt_image * SAM_mask
-        mask_gt = mask_gt * SAM_mask
+        mask_gt = mask_gt * SAM_mask 
         normal = normal * SAM_mask
         monoN = monoN * SAM_mask
         d2n = d2n * SAM_mask
         opac = opac * SAM_mask
 
-        # =========== Visible points & SAM Mask ===========
+        # =========== Visible points & SAM Mask (ljw, lsj) ===================
         scrPos_np_int = scrPos_np.astype(int)
 
         # Create a Boolean tensor of the same shape as scrPos_np with default value True
@@ -278,6 +289,13 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         loss += (0.005 - ((iteration / opt.iterations)) * 0.0) * loss_curv
         loss += loss_opac * 0.01
 
+
+        #================= Scale loss for Gaussian scale minimize (ljw, lsj) ==============
+        if use_scale_loss:
+            loss += scale_loss(scales = gaussians.get_scaling, lambda_flatten = 100.0) 
+        #================================================================================
+
+
         # mono = None
         if mono is not None:
             loss += (0.04 - ((iteration / opt.iterations)) * 0.03) * loss_monoN
@@ -312,7 +330,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 # min_opac = 0.05 if iteration <= opt.densify_from_iter else 0.005
 
                 # Binary_mask로 background random gaussian 삭제 
-                if iteration % opt.pruning_interval == 0 and iteration > 29000: # TODO : Visualization 함수 만들기
+                if iteration % opt.pruning_interval == 0 and iteration > 29700: # TODO : Visualization 함수 만들기
                     #gaussians.adaptive_prune(min_opac, scene.cameras_extent) # Original code
                     
                     plt.clf()
@@ -390,12 +408,12 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                     # plt.legend()
                     plt.savefig(f"./test/{iteration}_after_projected_with_sam_mask.png")
 
-                if iteration % opt.densification_interval == 0 and iteration < 29000:
+                if iteration % opt.densification_interval == 0 and iteration < 29700:
                     gaussians.adaptive_prune(min_opac, scene.cameras_extent) # Original code
                     gaussians.adaptive_densify(opt.densify_grad_threshold, scene.cameras_extent) # Original code
 
                 # TODO : reset opacity interval 왜하는지 알아내기
-                if (iteration - 1) % opt.opacity_reset_interval == 0 and opt.opacity_lr > 0 and iteration < 29000:
+                if (iteration - 1) % opt.opacity_reset_interval == 0 and opt.opacity_lr > 0 and iteration < 29700:
                     gaussians.reset_opacity(0.12, iteration)
 
 
@@ -432,7 +450,7 @@ def prepare_output_and_logger(args, exp_id):
         else:
             unique_str = str(uuid.uuid4())
 
-        args.model_path = os.path.join("./output/test601", f"{args.source_path.split('/')[-1]}_{unique_str[0:10]+exp_id}")
+        args.model_path = os.path.join("./output/test608", f"{args.source_path.split('/')[-1]}_{unique_str[0:10]+exp_id}")
         
         
     # Set up output folder

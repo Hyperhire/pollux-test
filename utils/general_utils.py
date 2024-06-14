@@ -256,6 +256,12 @@ def poisson_mesh(path, vtx, normal, color, depth, thrsh):
     ms.apply_coord_laplacian_smoothing(stepsmoothnum=3, boundary=True)
     ms.save_current_mesh(path + '_pruned.ply')
     
+    # ===================== Mesh filter apply ===========================
+    ms.apply_filter('generate_convex_hull')
+    ms.save_current_mesh(path + '_filtered.ply')
+    # ===================================================================
+
+
     pbar.update(1)
     pbar.close()
 

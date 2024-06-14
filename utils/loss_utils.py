@@ -18,6 +18,26 @@ from utils.general_utils import knn_pcl
 # from pytorch3d.loss import chamfer_distance
 from pytorch3d.ops import knn_points
 
+#================== scale loss add (ljw, lsj) ========================
+def scale_loss(scales, lambda_flatten = 100.0):
+    # lambda_flatten: Weight for the flatten loss
+    # scales: Retrieve the scaling factors for the Gaussians
+
+    # Find the second smallest scale for each set of scales
+    _min_scale, _ = torch.kthvalue(scales, 1, dim=1)
+
+    # Clamp the second smallest scale between 0 and 30
+    _min_scale = torch.clamp(_min_scale, 0, 30)
+
+    # Calculate the mean absolute value of the clamped second smallest scales
+    flatten_loss = torch.abs(_min_scale).mean()
+
+    # Add the weighted flatten loss to the total loss
+    return lambda_flatten * flatten_loss
+
+#=====================================================================
+
+
 def l1_loss(network_output, gt, weight=1):
     return torch.abs((network_output - gt)).mean()
 

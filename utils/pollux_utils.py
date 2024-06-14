@@ -32,10 +32,11 @@ def load_mask_image(mask_path, iteration, resolution):
 
         return resized_mask
 
+#=================== apply padding in mask image (ljw, lsj) ========================
 
 def load_dilated_mask_image(mask_path, iteration, resolution):
 
-    padding_goal = 12
+    padding_goal = 12 # defualt=12 the whole image size is 720*1200
 
     padding_size = int(padding_goal/resolution)
 
@@ -66,6 +67,29 @@ def load_dilated_mask_image(mask_path, iteration, resolution):
         resized_mask = resized_mask.squeeze(0) > 0  # 다시 원래 형태로 변환
 
         return resized_mask
+#===========================================================================
 
+
+
+
+        #=================== mask_gt and gt_image visualization (ljw, lsj)  ===============
+
+        #print(f"viewpoint_cam.image_name : {viewpoint_cam.image_name}")
+        #print(f"mask_gt : {mask_gt}")
+        #print(f"mask_gt shape : {mask_gt.shape}")
+        #print(f"gt_image : {gt_image}")
+        #print(f"gt_image shape : {gt_image.shape}")
+        ## Transfer tensors to CPU
+        #mask_gt_np = mask_gt.cpu().numpy()
+        #mask_gt_np = mask_gt_np.squeeze()
+        #gt_image_np = gt_image.cpu().numpy()
+        #gt_image_np = np.transpose(gt_image_np, (1, 2, 0))
+        #plt.imshow(mask_gt_np, cmap='gray')
+        #plt.savefig(f"./test/masked_gt_{viewpoint_cam.image_name}.png")
+        #plt.close()    
+        #plt.imshow(gt_image_np)
+        #plt.savefig(f"./test/gt_image{viewpoint_cam.image_name}.png")
+        #plt.close()    
+        ##==================================================================================
 
 
