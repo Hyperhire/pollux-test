@@ -4,3 +4,8 @@ log:
   saved_path: ./output/test615/white_background_ori_232_4888f0b2-escalelossmin1
 param:
   pad: 15
+  prune_after_iteration: 29000
+train:
+  use_scale_loss: True
+  use_mask_pruning: True
+  use_SAM_mask: True
