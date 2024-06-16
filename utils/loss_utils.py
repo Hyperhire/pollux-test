@@ -23,14 +23,21 @@ def scale_loss(scales, lambda_flatten = 100.0):
     # lambda_flatten: Weight for the flatten loss
     # scales: Retrieve the scaling factors for the Gaussians
 
-    # Find the second smallest scale for each set of scales
-    _min_scale, _ = torch.kthvalue(scales, 1, dim=1)
+    # Find the second and largest scale for each set of scales
+    _min_scale_largest, _ = torch.kthvalue(scales, 3)
+    _min_scale_second_largest, _ = torch.kthvalue(scales, 2)
 
     # Clamp the second smallest scale between 0 and 30
-    _min_scale = torch.clamp(_min_scale, 0, 30)
+    _min_scale_largest = torch.clamp(_min_scale_largest, 1, 30) 
+    _min_scale_second_largest = torch.clamp(_min_scale_second_largest, 1, 30) 
+
+    # Calculate the shape of the gaussians and add second largest scale
+    shape_scale = _min_scale_largest/_min_scale_second_largest - 1
+    shape_scale += _min_scale_second_largest - 1
 
     # Calculate the mean absolute value of the clamped second smallest scales
-    flatten_loss = torch.abs(_min_scale).mean()
+    flatten_loss = torch.abs(shape_scale).mean()
+
 
     # Add the weighted flatten loss to the total loss
     return lambda_flatten * flatten_loss

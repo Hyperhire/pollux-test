@@ -36,7 +36,7 @@ def load_mask_image(mask_path, iteration, resolution):
 
 def load_dilated_mask_image(mask_path, iteration, resolution):
 
-    padding_goal = 12 # defualt=12 the whole image size is 720*1200
+    padding_goal = 8 # defualt=12 the whole image size is 720*1200
 
     padding_size = int(padding_goal/resolution)
 

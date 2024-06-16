@@ -290,10 +290,10 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         loss += loss_opac * 0.01
 
 
-        #================= Scale loss for Gaussian scale minimize (ljw, lsj) ==============
+        #================= Scale loss for Gaussian scale minimize (ljw, lsj) ========================================
         if use_scale_loss:
             loss += scale_loss(scales = gaussians.get_scaling, lambda_flatten = 100.0) 
-        #================================================================================
+        #============================================================================================================
 
 
         # mono = None
@@ -330,7 +330,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 # min_opac = 0.05 if iteration <= opt.densify_from_iter else 0.005
 
                 # Binary_mask로 background random gaussian 삭제 
-                if iteration % opt.pruning_interval == 0 and iteration > 29700: # TODO : Visualization 함수 만들기
+                if iteration % opt.pruning_interval == 0 and iteration > (opt.iterations-300) : # TODO : Visualization 함수 만들기
                     #gaussians.adaptive_prune(min_opac, scene.cameras_extent) # Original code
                     
                     plt.clf()
@@ -408,12 +408,12 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                     # plt.legend()
                     plt.savefig(f"./test/{iteration}_after_projected_with_sam_mask.png")
 
-                if iteration % opt.densification_interval == 0 and iteration < 29700:
+                if iteration % opt.densification_interval == 0 and iteration < (opt.iterations-300):
                     gaussians.adaptive_prune(min_opac, scene.cameras_extent) # Original code
                     gaussians.adaptive_densify(opt.densify_grad_threshold, scene.cameras_extent) # Original code
 
                 # TODO : reset opacity interval 왜하는지 알아내기
-                if (iteration - 1) % opt.opacity_reset_interval == 0 and opt.opacity_lr > 0 and iteration < 29700:
+                if (iteration - 1) % opt.opacity_reset_interval == 0 and opt.opacity_lr > 0 and iteration < (opt.iterations-300):
                     gaussians.reset_opacity(0.12, iteration)
 
 
@@ -450,7 +450,7 @@ def prepare_output_and_logger(args, exp_id):
         else:
             unique_str = str(uuid.uuid4())
 
-        args.model_path = os.path.join("./output/test608", f"{args.source_path.split('/')[-1]}_{unique_str[0:10]+exp_id}")
+        args.model_path = os.path.join("./output/test615", f"{args.source_path.split('/')[-1]}_{unique_str[0:10]+exp_id}")
         
         
     # Set up output folder
