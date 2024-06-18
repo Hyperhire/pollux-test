@@ -9,7 +9,7 @@ diff_rasterization/dist
 tensorboard_3d
 screenshots
 test
-data
+# data
 nohup.out
 temp
 submodules/diff_gaussian_rasterization/diff_gaussian_rasterization.egg-info
