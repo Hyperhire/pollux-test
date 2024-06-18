@@ -34,11 +34,12 @@ except ImportError:
     TENSORBOARD_FOUND = False
 
 # =========== ljw ===========
-from utils.pollux_utils import load_mask_image, load_dilated_mask_image
+from utils.pollux_utils import load_mask_image, load_dilated_mask_image, calculate_distance_loss
 import yaml
 import torch.nn.functional as F
 from datetime import datetime as dt
-
+from utils.image_utils import world2scrn_two
+import faiss
 
 def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoint_iterations, checkpoint, debug_from):
 
@@ -51,6 +52,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
     # =========== lsj ===========
     use_scale_loss = cfg['train']['use_scale_loss']
     use_SAM_mask = cfg['train']['use_SAM_mask']
+    use_dist_loss = cfg['train']['use_dist_loss']
 
 
     first_iter = 0
@@ -94,9 +96,10 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         for iter in range(len(scene.getTrainCameras())):
             scale_num = int(scale)
             viewpoint_cam_temp = scene.getTrainCameras(scale_num)[iter]
-            dilated_mask = load_dilated_mask_image(mask_path=args.mask_path, iteration=viewpoint_cam_temp.image_name, resolution=scale_num)
+            dilated_mask = load_mask_image(mask_path=args.mask_path, iteration=viewpoint_cam_temp.image_name, resolution=scale_num)
             dilated_mask_per_scale[f'{scale}'][viewpoint_cam_temp.image_name]=dilated_mask
     #=========================================================================================
+
 
     viewpoint_stack = None
     ema_loss_for_log = 0.0
@@ -155,7 +158,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             monoN = mono[:3]
 
         # =========== visible gaussian points ===========
-        if use_SAM_mask or iteration > prune_after_iteration:
+        if use_SAM_mask:
             visible, scrPos = gaussians.seg_mask_prune([viewpoint_cam], pad) # default pad : 4
 
             # print(f"scrPos : {scrPos.shape}")
@@ -175,22 +178,19 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
 
             SAM_mask = dilated_mask_per_scale[str(scale)][viewpoint_cam.image_name] 
             SAM_mask = SAM_mask.cuda()
-            image = image * SAM_mask
-            gt_image = gt_image * SAM_mask
-            mask_gt = mask_gt * SAM_mask 
-            normal = normal * SAM_mask
-            monoN = monoN * SAM_mask
-            d2n = d2n * SAM_mask
-            opac = opac * SAM_mask
 
-            # =========== Visible points & SAM Mask (ljw, lsj) ===================
+            # image = image * SAM_mask
+            # gt_image = gt_image * SAM_mask
+            # mask_gt = mask_gt * SAM_mask 
+            # normal = normal * SAM_mask
+            # monoN = monoN * SAM_mask
+            # d2n = d2n * SAM_mask
+            # opac = opac * SAM_mask
+
             scrPos_np_int = scrPos_np.astype(int)
 
-            # Create a Boolean tensor of the same shape as scrPos_np with default value True
             mask_valid = torch.ones(scrPos_np.shape[0], dtype=torch.bool).cuda()
 
-            # Check the SAM_mask for each point in scrPos_np
-            # Using vectorized operations for performance
             x_coords = scrPos_np_int[:, 0]
             y_coords = scrPos_np_int[:, 1]
 
@@ -205,17 +205,37 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
 
             mask_valid[indices] = SAM_mask[0, y_coords, x_coords] != 0
 
-            # mask_valid에 해당하는 gaussian.get_xyz -> can be calculate gradients
-            
-            print(f"mask_valid : {mask_valid}")
-            print(f"gaussians.get_xyz : {gaussians.get_xyz}")        
-            print(f"mask_valid : {mask_valid.shape}")
-            print(f"gaussians.get_xyz : {gaussians.get_xyz.shape}")
+            # plt.clf()
+            # plt.imshow(image_np)
+            # plt.scatter(scrPos_np[mask_valid.cpu(), 0], scrPos_np[mask_valid.cpu(), 1], c='green', s=10, label='Inside SAM_mask')
+            # plt.scatter(scrPos_np[~mask_valid.cpu(), 0], scrPos_np[~mask_valid.cpu(), 1], c='red', s=10, label='Outside SAM_mask')
+            # plt.title(f"SAM Mask & Visible Points - Iteration {iteration}")
+            # plt.legend()
+            # plt.savefig(f"./test/projected_with_sam_mask_iter_{iteration}.png")
 
-            print(f"gaussians.get_xyz[mask_valid] : {gaussians.get_xyz[mask_valid]}")
-            print(f"gaussians.get_xyz[mask_valid].shape : {gaussians.get_xyz[mask_valid].shape}")
-        # else:
+            world_xyz = gaussians.get_xyz  # Get the 3D coordinates
 
+            # Assuming world2scrn_two is defined and returns projected 2D coordinates
+            _, _, _, _, proj_xyz = world2scrn_two(world_xyz, [viewpoint_cam], pad)  # Get projected 2D coordinates
+
+            # Downsample the projected coordinates and visible mask
+            proj_xyz_valid = proj_xyz[0, visible_mask, :].cpu().float().numpy()  # Ensure numpy array
+            scrPos_valid = np.array(scrPos_np[mask_valid.cpu()], dtype=np.float32)  # Convert to numpy array
+
+            # Using Faiss for KNN search
+            index = faiss.IndexFlatL2(proj_xyz_valid.shape[1])  # Dimension should match number of columns
+            index = faiss.index_cpu_to_gpu(faiss.StandardGpuResources(), 0, index)  # Move index to GPU
+            index.add(proj_xyz_valid)  # Add vectors to the index
+
+            distances, indices = index.search(scrPos_valid, 1)  # KNN search for k=1 (find the nearest neighbor)
+
+            # Convert distances to torch tensor
+            distances = torch.tensor(distances, dtype=torch.float32).cuda()
+
+            # Calculate distance loss
+            distance_loss = torch.mean(distances).cuda()
+
+            # print(f"Distance loss: {distance_loss.item()}")
 
         # =========== Loss ===========
         Ll1 = l1_loss(image, gt_image)
@@ -236,8 +256,8 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         
         curv_n = normal2curv(normal, mask_vis)
 
-        if use_SAM_mask:
-            curv_n = curv_n * SAM_mask
+        # if use_SAM_mask:
+        #     curv_n = curv_n * SAM_mask
         
         loss_curv = l1_loss(curv_n * 1, 0) #+ 1 * l1_loss(curv_d2n, 0)
         
@@ -254,6 +274,8 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             loss += scale_loss(scales = gaussians.get_scaling, lambda_flatten = 100.0) 
         #============================================================================================================
 
+        if use_dist_loss:
+            loss += distance_loss
 
         # mono = None
         if mono is not None:
@@ -261,14 +283,14 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             # loss += 0.01 * loss_depth
 
         loss.backward()
-
+        # print("Gradients for world_xyz:", world_xyz.grad)  # Check gradients for world_xyz
         iter_end.record()
         
         with torch.no_grad():
             # Progress bar
             ema_loss_for_log = 0.4 * loss_rgb.item() + 0.6 * ema_loss_for_log
             if iteration % 10 == 0:
-                progress_bar.set_postfix({"Loss": f"{ema_loss_for_log:.{7}f}, Pts={len(gaussians._xyz)}"})
+                progress_bar.set_postfix({"Loss": f"{ema_loss_for_log:.{7}f}, Pts={len(gaussians._xyz)}, Total={loss:.{7}f}"})
                 progress_bar.update(10)
             if iteration == opt.iterations:
                 progress_bar.close()
@@ -281,30 +303,43 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 scene.save(iteration)
 
             # Densification
+            # if iteration > opt.densify_from_iter:
+            #     # Keep track of max radii in image-space for pruning
+            #     gaussians.max_radii2D[visibility_filter] = torch.max(gaussians.max_radii2D[visibility_filter], radii[visibility_filter])
+            #     gaussians.add_densification_stats(viewspace_point_tensor, visibility_filter)
+            #     min_opac = 0.1# if iteration <= opt.densify_from_iter else 0.1
+            #     # min_opac = 0.05 if iteration <= opt.densify_from_iter else 0.005
+
+            #     # Binary_mask로 background random gaussian 삭제 
+            #     # if iteration % opt.pruning_interval == 0
+                
+            #     if iteration % opt.pruning_interval == 0 and iteration > prune_after_iteration : # TODO : Visualization 함수 만들기
+            #         #gaussians.adaptive_prune(min_opac, scene.cameras_extent) # Original code
+            #         gaussians.adaptive_prune_modified(min_opac, scene.cameras_extent, mask_valid) # Modified
+            #         gaussians.adaptive_densify_without_clone_and_split(opt.densify_grad_threshold, scene.cameras_extent) # Modified
+
+            #     if iteration % opt.densification_interval == 0 and iteration < (opt.iterations-300):
+            #         gaussians.adaptive_prune(min_opac, scene.cameras_extent) # Original code
+            #         gaussians.adaptive_densify(opt.densify_grad_threshold, scene.cameras_extent) # Original code
+
+            #     # TODO : reset opacity interval 왜하는지 알아내기
+            #     if (iteration - 1) % opt.opacity_reset_interval == 0 and opt.opacity_lr > 0 and iteration < (opt.iterations-300):
+            #         gaussians.reset_opacity(0.12, iteration)
+
+            # Densification
             if iteration > opt.densify_from_iter:
                 # Keep track of max radii in image-space for pruning
                 gaussians.max_radii2D[visibility_filter] = torch.max(gaussians.max_radii2D[visibility_filter], radii[visibility_filter])
                 gaussians.add_densification_stats(viewspace_point_tensor, visibility_filter)
                 min_opac = 0.1# if iteration <= opt.densify_from_iter else 0.1
                 # min_opac = 0.05 if iteration <= opt.densify_from_iter else 0.005
-
-                # Binary_mask로 background random gaussian 삭제 
-                # if iteration % opt.pruning_interval == 0
+                # if iteration % opt.pruning_interval == 0:
+                if iteration % opt.densification_interval == 0:
+                    gaussians.adaptive_prune(min_opac, scene.cameras_extent)
+                    gaussians.adaptive_densify(opt.densify_grad_threshold, scene.cameras_extent)
                 
-                if iteration % opt.pruning_interval == 0 and iteration > prune_after_iteration : # TODO : Visualization 함수 만들기
-                    #gaussians.adaptive_prune(min_opac, scene.cameras_extent) # Original code
-                    gaussians.adaptive_prune_modified(min_opac, scene.cameras_extent, mask_valid) # Modified
-                    gaussians.adaptive_densify_without_clone_and_split(opt.densify_grad_threshold, scene.cameras_extent) # Modified
-
-                if iteration % opt.densification_interval == 0 and iteration < (opt.iterations-300):
-                    gaussians.adaptive_prune(min_opac, scene.cameras_extent) # Original code
-                    gaussians.adaptive_densify(opt.densify_grad_threshold, scene.cameras_extent) # Original code
-
-                # TODO : reset opacity interval 왜하는지 알아내기
-                if (iteration - 1) % opt.opacity_reset_interval == 0 and opt.opacity_lr > 0 and iteration < (opt.iterations-300):
+                if (iteration - 1) % opt.opacity_reset_interval == 0 and opt.opacity_lr > 0:
                     gaussians.reset_opacity(0.12, iteration)
-
-
 
             if (iteration - 1) % 1000 == 0:
 
