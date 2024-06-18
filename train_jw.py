@@ -158,84 +158,89 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             monoN = mono[:3]
 
         # =========== visible gaussian points ===========
+            # 목표 :
+            # 이미지 내부에 해당하는 gs points에서
+            # SAM 밖의 포인트와 SAM내부 포인트 간의 거리를 dist loss로 부여
         if use_SAM_mask:
+            vis = True
+
+            # visible: 이미지 내에 해당하는지 여부인 mask
+            # scrPos: 3D GS points가 2D에 투영된 좌표(이미지 크기를 넘는 포인트들이 있을 수 있다)
+            # 그러면 상식적으로 visible.shape == scrPos.shape
+            # 확인 : visible, scrPos : (torch.Size([15848]), torch.Size([1(채널), 15848(개수), 2(y, x)]))
+            # visible.sum() : 15812 (True cases)
             visible, scrPos = gaussians.seg_mask_prune([viewpoint_cam], pad) # default pad : 4
 
-            # print(f"scrPos : {scrPos.shape}")
-            
-            indices = torch.nonzero(visible, as_tuple=True)[0]
+            # visible에 해당하는 screen position만 남기기
+            # CUDA : visible_scrPos : torch.Size([15812, 2])
+            visible_scrPos = scrPos[0][visible]
 
-            visible_mask = torch.zeros(scrPos.shape[1], dtype=torch.bool)
-            visible_mask[indices] = True
-
-            filtered_scrPos = torch.full_like(scrPos, -1)
-            filtered_scrPos[:, visible_mask, :] = scrPos[:, visible_mask, :]
-
-            # print(f"filtered_scrPos : {filtered_scrPos.shape}")
-
-            scrPos_np = filtered_scrPos.cpu().numpy()[0]
-            image_np = gt_image.cpu().numpy().transpose(1, 2, 0)
-
+            # SAM_mask : torch.Size([3, 320, 180])
             SAM_mask = dilated_mask_per_scale[str(scale)][viewpoint_cam.image_name] 
             SAM_mask = SAM_mask.cuda()
 
-            # image = image * SAM_mask
-            # gt_image = gt_image * SAM_mask
-            # mask_gt = mask_gt * SAM_mask 
-            # normal = normal * SAM_mask
-            # monoN = monoN * SAM_mask
-            # d2n = d2n * SAM_mask
-            # opac = opac * SAM_mask
+            # ~ = All_y, All_x
+            visible_pos_to_yx_coord = visible_scrPos[:, 1], visible_scrPos[:, 0] 
+            # SAM_mask_with_visible : torch.Size([15812])
+            SAM_mask_with_visible = SAM_mask[0][visible_pos_to_yx_coord]
 
-            scrPos_np_int = scrPos_np.astype(int)
+            # 15812[15812]
+            inside_sam = visible_scrPos[SAM_mask_with_visible]
+            outside_sam = visible_scrPos[~SAM_mask_with_visible]
 
-            mask_valid = torch.ones(scrPos_np.shape[0], dtype=torch.bool).cuda()
+            # cdist : dist벡터화 계산
+            dist_matrix = torch.cdist(outside_sam.unsqueeze(0).float(), inside_sam.unsqueeze(0).float(), p=2).squeeze(0)
 
-            x_coords = scrPos_np_int[:, 0]
-            y_coords = scrPos_np_int[:, 1]
+            print(f"dist_matrix : {dist_matrix}")
+    
+            # 각 outside_point에 대해 가장 가까운 inside_point와의 거리 선택
+            min_dist, min_indices = torch.min(dist_matrix, dim=1)
+            
+            # 거리 손실
+            distance_loss = min_dist.mean()
+            
+            print(f'Distance Loss: {distance_loss.item()}')
 
-            valid_x = (x_coords >= 0) & (x_coords < SAM_mask.shape[2])
-            valid_y = (y_coords >= 0) & (y_coords < SAM_mask.shape[1])
+            # print(f"inside_sam : {inside_sam}")
+            # print(f"inside_sam : {inside_sam.shape}") # 12875
+            # print(f"outside_sam : {outside_sam}")
+            # print(f"outside_sam : {outside_sam.shape}") # 2937
 
-            valid_coords = valid_x & valid_y
 
-            x_coords = x_coords[valid_coords]
-            y_coords = y_coords[valid_coords]
-            indices = torch.arange(scrPos_np.shape[0], device='cuda')[valid_coords]
+            if vis:
+                # GT-Image : CUDA to cpu
+                gt_image_np = gt_image.detach().cpu().numpy().transpose(1, 2, 0)
+                # CUDA to cpu (for vis)
+                visible_scrPos_np = visible_scrPos.detach().cpu().numpy()
 
-            mask_valid[indices] = SAM_mask[0, y_coords, x_coords] != 0
+                fig, axs = plt.subplots(1, 2, figsize=(20, 10))
+                axs[0].imshow(gt_image_np)
+                axs[0].scatter(visible_scrPos_np[:, 0], visible_scrPos_np[:, 1], c='green', s=10)  # 초록색 점으로 표시
+                axs[0].set_title('Gaussian Points on GT Image')
+                axs[0].set_xlabel('X-axis')
+                axs[0].set_ylabel('Y-axis')
 
-            # plt.clf()
-            # plt.imshow(image_np)
-            # plt.scatter(scrPos_np[mask_valid.cpu(), 0], scrPos_np[mask_valid.cpu(), 1], c='green', s=10, label='Inside SAM_mask')
-            # plt.scatter(scrPos_np[~mask_valid.cpu(), 0], scrPos_np[~mask_valid.cpu(), 1], c='red', s=10, label='Outside SAM_mask')
-            # plt.title(f"SAM Mask & Visible Points - Iteration {iteration}")
-            # plt.legend()
-            # plt.savefig(f"./test/projected_with_sam_mask_iter_{iteration}.png")
+                axs[1].imshow(gt_image_np)
+                axs[1].scatter(inside_sam[:, 0].cpu(), inside_sam[:, 1].cpu(), c='green', s=10, label='Inside SAM')
+                axs[1].scatter(outside_sam[:, 0].cpu(), outside_sam[:, 1].cpu(), c='red', s=10, label='Outside SAM')
 
-            world_xyz = gaussians.get_xyz  # Get the 3D coordinates
+                # outside_sam 포인트와 가장 가까운 inside_sam 포인트 간의 선 그리기
+                for i, index in enumerate(min_indices):
+                    outside_point = outside_sam[i].cpu()
+                    inside_point = inside_sam[index].cpu()
+                    axs[1].plot([outside_point[0], inside_point[0]], [outside_point[1], inside_point[1]], 'b-', linewidth=0.5)
 
-            # Assuming world2scrn_two is defined and returns projected 2D coordinates
-            _, _, _, _, proj_xyz = world2scrn_two(world_xyz, [viewpoint_cam], pad)  # Get projected 2D coordinates
+                axs[1].set_title('Gaussian Points on GT Image')
+                axs[1].set_xlabel('X-axis')
+                axs[1].set_ylabel('Y-axis')
+                axs[1].legend()
 
-            # Downsample the projected coordinates and visible mask
-            proj_xyz_valid = proj_xyz[0, visible_mask, :].cpu().float().numpy()  # Ensure numpy array
-            scrPos_valid = np.array(scrPos_np[mask_valid.cpu()], dtype=np.float32)  # Convert to numpy array
+                plt.savefig("./test/my_combined_test.png")
+                plt.show()
 
-            # Using Faiss for KNN search
-            index = faiss.IndexFlatL2(proj_xyz_valid.shape[1])  # Dimension should match number of columns
-            index = faiss.index_cpu_to_gpu(faiss.StandardGpuResources(), 0, index)  # Move index to GPU
-            index.add(proj_xyz_valid)  # Add vectors to the index
 
-            distances, indices = index.search(scrPos_valid, 1)  # KNN search for k=1 (find the nearest neighbor)
 
-            # Convert distances to torch tensor
-            distances = torch.tensor(distances, dtype=torch.float32).cuda()
-
-            # Calculate distance loss
-            distance_loss = torch.mean(distances).cuda()
-
-            # print(f"Distance loss: {distance_loss.item()}")
+            
 
         # =========== Loss ===========
         Ll1 = l1_loss(image, gt_image)
