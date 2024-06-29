@@ -1,0 +1,12 @@
+log:
+  datetime: '2024-06-28 18:17:26'
+  last_train_id: 1c7a739c-ffour
+  saved_path: ./output/test615/white_background_100_1c7a739c-ffour
+param:
+  pad: 6
+  prune_after_iteration: 29000
+train:
+  use_SAM_mask: true
+  use_dist_loss: true
+  use_mask_pruning: true
+  use_scale_loss: true

@@ -220,13 +220,13 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         SAM_mask = dilated_mask_per_scale[str(scale)][viewpoint_cam.image_name] 
         SAM_mask = SAM_mask.cuda()
 
-        image = image * SAM_mask
-        gt_image = gt_image * SAM_mask
-        mask_gt = mask_gt * SAM_mask 
-        normal = normal * SAM_mask
-        monoN = monoN * SAM_mask
-        d2n = d2n * SAM_mask
-        opac = opac * SAM_mask
+        # image = image * SAM_mask
+        # gt_image = gt_image * SAM_mask
+        # mask_gt = mask_gt * SAM_mask 
+        # normal = normal * SAM_mask
+        # monoN = monoN * SAM_mask
+        # d2n = d2n * SAM_mask
+        # opac = opac * SAM_mask
 
         # =========== Visible points & SAM Mask (ljw, lsj) ===================
         scrPos_np_int = scrPos_np.astype(int)
@@ -347,7 +347,6 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                     # =======================================
                     visible, scrPos = gaussians.seg_mask_prune([viewpoint_cam], pad) # default pad : 4
 
-                    # print(f"scrPos : {scrPos.shape}")
                     
                     indices = torch.nonzero(visible, as_tuple=True)[0]
 
@@ -361,21 +360,6 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
 
                     scrPos_np = filtered_scrPos.cpu().numpy()[0]
                     image_np = gt_image.cpu().numpy().transpose(1, 2, 0)
-
-                    # if iteration % 100 == 0:
-                    #     plt.imshow(image_np)
-                    #     plt.scatter(scrPos_np[:, 0], scrPos_np[:, 1], c='red', s=0.001)
-                    #     plt.savefig("./test/projected.png")
-                        
-                    # =========== SAM Mask ===========
-
-                    image = image * SAM_mask
-                    gt_image = gt_image * SAM_mask
-                    mask_gt = mask_gt * SAM_mask
-                    normal = normal * SAM_mask
-                    monoN = monoN * SAM_mask
-                    d2n = d2n * SAM_mask
-                    opac = opac * SAM_mask
 
                     # =========== Visible points & SAM Mask ===========
                     scrPos_np_int = scrPos_np.astype(int)
@@ -442,6 +426,13 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 print("\n[ITER {}] Saving Checkpoint".format(iteration))
                 torch.save((gaussians.capture(), iteration), scene.model_path + "/chkpnt" + str(iteration) + ".pth")
 
+    last_path = cfg['log']['saved_path']
+    last_path = os.path.join(last_path, 'last_log.yaml')
+    with open(last_path, 'w') as file:
+        yaml.dump(cfg, file, default_flow_style=False)
+
+    return cfg
+
 
 def prepare_output_and_logger(args, exp_id):    
     if not args.model_path:
@@ -505,6 +496,7 @@ def training_report(tb_writer, iteration, Ll1, loss, l1_loss, elapsed, testing_i
         torch.cuda.empty_cache()
 
 if __name__ == "__main__":
+    import subprocess
     # Set up command line argument parser
     parser = ArgumentParser(description="Training script parameters")
     lp = ModelParams(parser)
@@ -533,7 +525,14 @@ if __name__ == "__main__":
     args.mask_path = os.path.join(args.data_path, 'binary_mask_npy/binary_mask_npy')
 
     torch.autograd.set_detect_anomaly(args.detect_anomaly)
-    training(lp.extract(args), op.extract(args), pp.extract(args), args.test_iterations, args.save_iterations, args.checkpoint_iterations, args.start_checkpoint, args.debug_from)
+    cfg = training(lp.extract(args), op.extract(args), pp.extract(args), args.test_iterations, args.save_iterations, args.checkpoint_iterations, args.start_checkpoint, args.debug_from)
 
     # All done
     print("\nTraining complete.")
+
+
+    model_directory = cfg['log']['saved_path']
+
+    script_path = 'render.py'
+
+    subprocess.run(['python', str(script_path), '-m', str(model_directory), '--img', '--depth', str(10)])
