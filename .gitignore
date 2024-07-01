@@ -2,6 +2,7 @@
 .vscode
 .DS_Store
 output
+preprocessing
 build
 diff_rasterization/diff_rast.egg-info
 diff_gaussian_rasterization.egg-info
@@ -16,4 +17,6 @@ submodules/diff_gaussian_rasterization/diff_gaussian_rasterization.egg-info
 submodules/diff_gaussian_rasterization/build
 submodules/diff_gaussian_rasterization/dist
 submodules/omnidata/pretrained_models
-
+ChamferDistancePytorch
+segment_anything
+*.pth
