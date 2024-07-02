@@ -1,4 +1,9 @@
 # High-quality Surface Reconstruction using Gaussian Surfels
+
+[pollux_README.md](./pollux_README.md)에 모든 환경 설정에 관해 작성 중입니다.
+
+<br>
+
 <!-- [Pinxuan Dai](https://turandai.github.io/)\*, 
 [Jiamin Xu](https://superxjm.github.io/)\*, 
 Wenxiang Xie, 
