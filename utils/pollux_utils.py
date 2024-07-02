@@ -37,7 +37,7 @@ def load_mask_image(mask_path, iteration, resolution):
 
 def load_dilated_mask_image(mask_path, iteration, resolution):
 
-    padding_goal = 8 # defualt=12 the whole image size is 720*1200
+    padding_goal = 4 # defualt=12 the whole image size is 720*1200
 
     padding_size = int(padding_goal/resolution)
 
@@ -182,9 +182,10 @@ def segment_frames_from_video(video_name, frame_num = 150):
     if not os.path.exists(binary_mask_dir):
         os.makedirs(binary_mask_dir)
     files =os.listdir(input_folder)
-    per_frame = len(files)/frame_num
+    sorted_files = sorted(files, key=str.low.lower)
+    per_frame = int(len(sorted_files)/frame_num)
     count = 0
-    for filename in sorted(os.listdir(input_folder)):
+    for filename in sorted(sorted_files):
         if count % per_frame == 0 & filename.lower().endswith(('.png', '.jpg', '.jpeg')):
             input_path = os.path.join(input_folder, filename)
             result_img, mask_img, mask = segmentation_usingSAM(input_path, predictor)
@@ -192,4 +193,5 @@ def segment_frames_from_video(video_name, frame_num = 150):
             np.save(os.path.join(binary_mask_dir, 'binary_mask_' + filename.split('.')[0] + '.npy'), mask)
         count+=1
     print("Frame segmentation is completed. All frames are segmented and image, masks are saved.")
+
 

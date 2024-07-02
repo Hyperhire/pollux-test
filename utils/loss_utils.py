@@ -27,13 +27,15 @@ def scale_loss(scales, lambda_flatten = 100.0):
     _min_scale_largest, _ = torch.kthvalue(scales, 3)
     _min_scale_second_largest, _ = torch.kthvalue(scales, 2)
 
+    scale_max_value = 0.25
+
     # Clamp the second smallest scale between 0 and 30
-    _min_scale_largest = torch.clamp(_min_scale_largest, 1, 30) 
-    _min_scale_second_largest = torch.clamp(_min_scale_second_largest, 1, 30) 
+    _min_scale_largest = torch.clamp(_min_scale_largest, scale_max_value, 30) 
+    _min_scale_second_largest = torch.clamp(_min_scale_second_largest, scale_max_value, 30) 
 
     # Calculate the shape of the gaussians and add second largest scale
     shape_scale = _min_scale_largest/_min_scale_second_largest - 1
-    shape_scale += _min_scale_second_largest - 1
+    shape_scale += _min_scale_second_largest - scale_max_value
 
     # Calculate the mean absolute value of the clamped second smallest scales
     flatten_loss = torch.abs(shape_scale).mean()
