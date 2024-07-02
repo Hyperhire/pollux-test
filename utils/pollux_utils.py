@@ -171,7 +171,7 @@ def segmentation_usingSAM(image_path, predictor):
     return result_img, result_mask, mask_3d
     
 # Segment all images in the frames that is in the video
-def segment_frames_from_video(video_name):
+def segment_frames_from_video(video_name, frame_num = 150):
     sam = sam_model_registry["vit_h"](checkpoint="sam_vit_h_4b8939.pth")
     predictor = SamPredictor(sam)
     input_folder = "preprocessing/frames_from_video/" + video_name.split(".")[0]
@@ -181,11 +181,15 @@ def segment_frames_from_video(video_name):
     binary_mask_dir = save_dir + "/binary_mask"
     if not os.path.exists(binary_mask_dir):
         os.makedirs(binary_mask_dir)
-
+    files =os.listdir(input_folder)
+    per_frame = len(files)/frame_num
+    count = 0
     for filename in sorted(os.listdir(input_folder)):
-        if filename.lower().endswith(('.png', '.jpg', '.jpeg')):
+        if count % per_frame == 0 & filename.lower().endswith(('.png', '.jpg', '.jpeg')):
             input_path = os.path.join(input_folder, filename)
             result_img, mask_img, mask = segmentation_usingSAM(input_path, predictor)
             result_img.save(os.path.join(save_dir, filename))
             np.save(os.path.join(binary_mask_dir, 'binary_mask_' + filename.split('.')[0] + '.npy'), mask)
+        count+=1
     print("Frame segmentation is completed. All frames are segmented and image, masks are saved.")
+
