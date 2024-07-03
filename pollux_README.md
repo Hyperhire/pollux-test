@@ -7,11 +7,6 @@ DOCKER <br>
 NVIDIA-DOCKER-TOOLKIT - [link](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html#installing-with-apt) <br>
 COLMAP - [link](https://colmap.github.io/install.html#linux)
 
-```sh
-# In ~/.bashrc
-alias docker_init='sudo chown root:docker /var/run/docker.sock && sudo chmod 666 /var/run/docker.sock'
-```
-
 ## Environment Setting
 1. 빈 Docker image & Container 제작
 ```
@@ -23,7 +18,7 @@ docker build -t surfel .
 ```
 bash container_run.sh surfel surfel:latest
 ```
-1-1. Docker 시작 및 종료 방법
+1-1. Docker 시작 & 접속 & 종료 방법
 ```
 docker start surfel
 ```
@@ -76,4 +71,19 @@ python estimate_normal.py --img_path path/to/your/image/directory
 
 ```
 bash util_colmap/run_colmap_pollux.sh --img_name [your image path]
+```
+
+## Trouble Shooting
+### Docker permission
+- Error
+```
+permission denied while trying to connect to the Docker daemon socket at unix:///var/run/docker.sock: Get "http://%2Fvar%2Frun%2Fdocker.sock/v1.24/containers/json": dial unix /var/run/docker.sock: connect: permission denied
+```
+- How to do
+```sh
+# In ~/.bashrc
+alias docker_init='sudo chown root:docker /var/run/docker.sock && sudo chmod 666 /var/run/docker.sock'
+```
+```sh
+docker_init
 ```
