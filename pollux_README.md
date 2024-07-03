@@ -2,7 +2,15 @@
 새로운 서버 기준으로 작성하였습니다.
 
 ## requirements
-NVIDIA-DRIVER
+NVIDIA-DRIVER <br>
+DOCKER <br>
+NVIDIA-DOCKER-TOOLKIT - [link](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html#installing-with-apt) <br>
+COLMAP - [link](https://colmap.github.io/install.html#linux)
+
+```sh
+# In ~/.bashrc
+alias docker_init='sudo chown root:docker /var/run/docker.sock && sudo chmod 666 /var/run/docker.sock'
+```
 
 ## Environment Setting
 1. 빈 Docker image & Container 제작
@@ -51,4 +59,21 @@ conda activate gaussian_surfels
 ```shell
 cd submodules/diff-gaussian-rasterization
 python setup.py install && pip install .
+```
+
+3. Omnidata
+```sh
+cd submodules/omnidata
+```
+```sh
+sh tools/download_surface_normal_models.sh
+```
+```sh
+python estimate_normal.py --img_path path/to/your/image/directory
+```
+
+4. COLMAP
+
+```
+bash util_colmap/run_colmap_pollux.sh --img_name [your image path]
 ```
