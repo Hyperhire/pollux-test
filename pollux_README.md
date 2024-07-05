@@ -87,3 +87,11 @@ alias docker_init='sudo chown root:docker /var/run/docker.sock && sudo chmod 666
 ```sh
 docker_init
 ```
+
+### VSCode에서 코드 저장이 안되는 이유
+git clone이나 git pull등을 Docker container **내부**에서 하게 되면 관리자 권한이 부여되기 때문에
+<br><br>
+VSCode에서 저장이 안될 수 있습니다.
+<br><br>
+git clone이나 git pull은 container밖에서 진행하시는 것이 좋습니다.
+
