@@ -95,3 +95,6 @@ VSCode에서 저장이 안될 수 있습니다.
 <br><br>
 git clone이나 git pull은 container밖에서 진행하시는 것이 좋습니다.
 
+<br><br>
+**해결 방법**: 위 경우로 진행하기 어려운 경우, chmod 777을 사용하여 관리자 권한을 빼주면 됩니다.<br>
+docker container내에서 저장이 안되는 파일을 `chmod 777 utils/ours.txt` 이런식으로 명령어를 주면 됩니다.
