@@ -11,81 +11,29 @@ import torch.nn.functional as F
 from PIL import Image
 from segment_anything.segment_anything import sam_model_registry, SamPredictor
 import argparse
+from tqdm import tqdm
 
-def load_mask_image(mask_path, iteration, resolution):
-    directory_path = mask_path
-    file_format = "binary_mask_img_{}.jpg.npy" # "binary_mask_{}.npy"
-
-    iteration = iteration.split('_')[-1]
-
-    file_path = os.path.join(directory_path, file_format.format(iteration))
-    if os.path.exists(file_path):
-        binary_mask = np.load(file_path)
-        binary_mask = binary_mask.astype(np.uint8)
-
-        orig_h, orig_w, _ = binary_mask.shape
-
-        new_resolution = (round(orig_h / resolution), round(orig_w / resolution))
-
-        # Resize the image
-        resized_mask = resize_image(torch.from_numpy(binary_mask).permute(2, 0, 1), new_resolution)
-        resized_mask = (resized_mask > 0)
-
-        return resized_mask
-
-# apply padding in mask image lsj
-
-def load_dilated_mask_image(mask_path, iteration, resolution):
-
-    padding_goal = 4 # defualt=12 the whole image size is 720*1200
-
-    padding_size = int(padding_goal/resolution)
-
-    directory_path = mask_path
-    file_format = "binary_mask_img_{}.jpg.npy"
-
-    iteration = iteration.split('_')[-1]
-
-    file_path = os.path.join(directory_path, file_format.format(iteration))
-    if os.path.exists(file_path):
-        binary_mask = np.load(file_path)
-        binary_mask = binary_mask.astype(np.uint8)
-
-        orig_h, orig_w, _ = binary_mask.shape
-
-        new_resolution = (round(orig_h / resolution), round(orig_w / resolution))
-
-        # Resize the image
-        resized_mask = resize_image(torch.from_numpy(binary_mask).permute(2, 0, 1), new_resolution)
-        resized_mask = (resized_mask > 0)
-
-        # padding
-        kernel = torch.ones((1, 3, 2*padding_size+1, 2*padding_size+1), dtype=torch.float32)  # 5x5 커널, 중앙 픽셀 포함
-        resized_mask = resized_mask.unsqueeze(0).to(torch.float32)  # 배치 차원을 추가하고 float으로 변환
-
-        # 2픽셀 확장 적용
-        resized_mask = F.conv2d(resized_mask, kernel, padding=padding_size)  # padding을 2로 설정하여 테두리 처리
-        resized_mask = resized_mask.squeeze(0) > 0  # 다시 원래 형태로 변환
-
-        return resized_mask
+main_img_root = '/root/workspace/src/preprocessing'
 
 # Framing video to images
 def frame_video(video_name):
     # Create a VideoCapture object
-    video_path = "preprocessing/input_video/" + video_name
+    video_path = f"{main_img_root}/input_video/" + video_name
     cap = cv2.VideoCapture(video_path)
     
     # Check if camera opened successfully
     if not cap.isOpened():
         print(f"Error: Could not open video in {video_path}.")
         return
-    print("Video in {video_path} was opened")
+    print(f"Video in {video_path} was opened")
 
     # Directory where the images will be saved
-    save_dir = "preprocessing/frames_from_video/" + video_name.split(".")[0]
+    save_dir = f"{main_img_root}/frames_from_video/" + video_name.split(".")[0]
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
-
+    else:
+        print("Already frame_video Done!")
+        return
     # Frame counter
     frame_count = 0
     
@@ -174,18 +122,23 @@ def segmentation_usingSAM(image_path, predictor):
 def segment_frames_from_video(video_name, frame_num = 150):
     sam = sam_model_registry["vit_h"](checkpoint="sam_vit_h_4b8939.pth")
     predictor = SamPredictor(sam)
-    input_folder = "preprocessing/frames_from_video/" + video_name.split(".")[0]
-    save_dir = "preprocessing/segmented_frames/" + video_name.split(".")[0]
+    input_folder = f"{main_img_root}/frames_from_video/" + video_name.split(".")[0]
+    save_dir = f"{main_img_root}/segmented_frames/" + video_name.split(".")[0]
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
+    else:
+        print("Already SAM Done!")
+        return
     binary_mask_dir = save_dir + "/binary_mask"
     if not os.path.exists(binary_mask_dir):
         os.makedirs(binary_mask_dir)
     files =os.listdir(input_folder)
-    sorted_files = sorted(files, key=str.low.lower)
-    per_frame = int(len(sorted_files)/frame_num)
+    sorted_files = sorted(files, key=str.lower)
+
+    per_frame = int(len(sorted_files)/int(frame_num))
     count = 0
-    for filename in sorted(sorted_files):
+    # for filename in sorted(sorted_files):
+    for filename in tqdm(sorted_files, desc="Segmenting frames"):
         if count % per_frame == 0 & filename.lower().endswith(('.png', '.jpg', '.jpeg')):
             input_path = os.path.join(input_folder, filename)
             result_img, mask_img, mask = segmentation_usingSAM(input_path, predictor)
@@ -196,9 +149,9 @@ def segment_frames_from_video(video_name, frame_num = 150):
 
 # Make background white using the SAM numpy mask
 def white_background_frames(video_name):
-    input_folder = "preprocessing/frames_from_video/" + video_name.split(".")[0]
-    mask_folder = "preprocessing/segmented_frames/" + video_name.split(".")[0] + "/binary_mask"
-    save_dir = "preprocessing/white_background_frames/" + video_name.split(".")[0]
+    input_folder = f"{main_img_root}/frames_from_video/" + video_name.split(".")[0]
+    mask_folder = f"{main_img_root}/segmented_frames/" + video_name.split(".")[0] + "/binary_mask"
+    save_dir = f"{main_img_root}/white_background_frames/" + video_name.split(".")[0]
     
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
@@ -229,7 +182,9 @@ def white_background_frames(video_name):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Segment objects in an image using SAM.")
     parser.add_argument("--img_path", type=str, required=True, help="Path to the input video.")
-    parser.add_argument("--frame_num", type=str, required=True, help="Path to the input video.")
+    parser.add_argument("--frame_num", type=str, required=True, help="Number of image frames.")
     
     args = parser.parse_args()
+    frame_video(args.img_path)
     segment_frames_from_video(args.img_path, args.frame_num)
+    white_background_frames(args.img_path)

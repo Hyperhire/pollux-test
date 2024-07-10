@@ -14,7 +14,7 @@ from segment_anything.segment_anything import sam_model_registry, SamPredictor
 
 def load_mask_image(mask_path, iteration, resolution):
     directory_path = mask_path
-    file_format = "binary_mask_img_{}.jpg.npy" # "binary_mask_{}.npy"
+    file_format = "binary_mask_{}.npy" # "binary_mask_{}.npy"
 
     iteration = iteration.split('_')[-1]
 
@@ -42,9 +42,11 @@ def load_dilated_mask_image(mask_path, iteration, resolution):
     padding_size = int(padding_goal/resolution)
 
     directory_path = mask_path
-    file_format = "binary_mask_img_{}.jpg.npy"
+    file_format = "binary_mask_{}.npy"
 
     iteration = iteration.split('_')[-1]
+
+    iteration = iteration[-4:]
 
     file_path = os.path.join(directory_path, file_format.format(iteration))
     if os.path.exists(file_path):

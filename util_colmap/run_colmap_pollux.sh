@@ -28,24 +28,30 @@ fi
 
 cd ${DATA_PATH}
 
-colmap feature_extractor \
-    --image_path $IMG_PATH \
-    --database_path database.db
+# colmap feature_extractor \
+#     --image_path $IMG_PATH \
+#     --database_path database.db
 
-colmap exhaustive_matcher \
-    --database_path database.db
+# colmap exhaustive_matcher \
+#     --database_path database.db
 
-SPARSE_DIR=${DATA_PATH}/sparse
-if [ ! -d ${SPARSE_DIR} ]; then
-    mkdir -p ${SPARSE_DIR}
-fi
+# SPARSE_DIR=${DATA_PATH}/sparse
+# if [ ! -d ${SPARSE_DIR} ]; then
+#     mkdir -p ${SPARSE_DIR}
+# fi
 
-colmap mapper \
-    --database_path database.db \
-    --image_path $IMG_PATH \
-    --output_path $DATA_PATH/sparse
+# colmap mapper \
+#     --database_path database.db \
+#     --image_path $IMG_PATH \
+#     --output_path $DATA_PATH/sparse
+colmap automatic_reconstructor \
+        --workspace_path $DATA_PATH \
+        --image_path $IMG_PATH \
+        --sparse 1 \
+        --dense 0
 
-python3 /root/workspace/src/DNMP/bin_to_txt.py ${SPARSE_DIR}/0
+
+# python3 /root/workspace/src/util_colmap/bin_to_txt_pollux.py ${SPARSE_DIR}/0
 
 end_time=$(date +%s)
 elapsed_time=$(( end_time - start_time ))

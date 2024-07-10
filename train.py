@@ -522,7 +522,7 @@ if __name__ == "__main__":
     
     # ljw -> TODO : config(.yaml) file setting
     args.data_path = os.path.join("./data")
-    args.mask_path = os.path.join(args.data_path, 'binary_mask_npy')
+    args.mask_path = os.path.join(args.source_path, 'binary_mask')
 
     torch.autograd.set_detect_anomaly(args.detect_anomaly)
     cfg = training(lp.extract(args), op.extract(args), pp.extract(args), args.test_iterations, args.save_iterations, args.checkpoint_iterations, args.start_checkpoint, args.debug_from)
