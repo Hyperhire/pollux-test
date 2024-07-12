@@ -1,14 +1,39 @@
 # pollux_README
 새로운 서버 기준으로 작성하였습니다.
 
-## requirements
+## Table of Contents
+1. [Requirements](#requirements)
+2. [How to Run](#how-to-run)
+3. [Environment Setting](#environment-setting)
+    - [1. 빈 Docker Image & Container 제작](#1-빈-docker-image--container-제작)
+    - [2. 환경 설정](#2-환경-설정)
+    - [3. Omnidata](#3-omnidata)
+    - [4. COLMAP](#4-colmap)
+4. [Trouble Shooting](#trouble-shooting)
+    - [Docker Permission](#docker-permission)
+    - [VSCode에서 코드 저장이 안되는 이유](#vscode에서-코드-저장이-안되는-이유)
+
+## Requirements
 NVIDIA-DRIVER <br>
 DOCKER <br>
 NVIDIA-DOCKER-TOOLKIT - [link](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html#installing-with-apt) <br>
 COLMAP - [link](https://colmap.github.io/install.html#linux)
 
+
+## How to run
+```
+docker_init
+docker start sf12
+docker exec -it sf12 /bin/bash
+```
+```
+# mp4 file is in `./preprocessing/input_video/`
+CUDA_VISIBLE_DEVICES=1 bash run_all.sh --seq_name video_sample_LSJ_test.mp4 --frame_num 150 --save_path ./output/0700
+```
+
+
 ## Environment Setting
-1. 빈 Docker image & Container 제작
+### 1. 빈 Docker image & Container 제작
 ```
 cd docker
 ```
@@ -29,7 +54,7 @@ docker exec -it surfel /bin/bash
 docker stop surfel
 ```
 
-2. 환경 설정
+### 2. 환경 설정
 ```shell
 cd ~/workspace/src
 ```
@@ -56,7 +81,7 @@ cd submodules/diff-gaussian-rasterization
 python setup.py install && pip install .
 ```
 
-3. Omnidata
+### 3. Omnidata
 ```sh
 cd submodules/omnidata
 ```
@@ -67,7 +92,7 @@ sh tools/download_surface_normal_models.sh
 python estimate_normal.py --img_path path/to/your/image/directory
 ```
 
-4. COLMAP
+### 4. COLMAP
 
 ```
 bash util_colmap/run_colmap_pollux.sh --img_name [your image path]

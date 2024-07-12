@@ -121,6 +121,7 @@ def segmentation_usingSAM(image_path, predictor):
 # Segment all images in the frames that is in the video
 def segment_frames_from_video(video_name, frame_num = 150):
     sam = sam_model_registry["vit_h"](checkpoint="sam_vit_h_4b8939.pth")
+    sam.to(device = "cuda")
     predictor = SamPredictor(sam)
     input_folder = f"{main_img_root}/frames_from_video/" + video_name.split(".")[0]
     save_dir = f"{main_img_root}/segmented_frames/" + video_name.split(".")[0]

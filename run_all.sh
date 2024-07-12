@@ -10,12 +10,13 @@ while [[ "$#" -gt 0 ]]; do
     case $1 in
         --seq_name) SEQ_NAME="$2"; shift ;;
         --frame_num) FRAME_NUM="$2"; shift ;;
+        --save_path) SAVE_PATH="$2"; shift ;;
         *) echo "Unknown parameter passed: $1"; exit 1 ;;
     esac
     shift
 done
 
-if [ -z "$SEQ_NAME" ] || [ -z "$FRAME_NUM" ]; then
+if [ -z "$SEQ_NAME" ] || [ -z "$FRAME_NUM" ] || [ -z "$SAVE_PATH" ]; then
     echo "Error: Missing required arguments."
     echo "Usage: bash run_all.sh --img_path <img_path> --frame_num \"<frame_num>\""
     exit 1
@@ -23,6 +24,7 @@ fi
 
 print_green "SEQ_NAME: $SEQ_NAME"
 print_green "FRAME_NUM: $FRAME_NUM"
+print_green "SAVE_PATH: $SAVE_PATH"
 
 export PYTHONPATH=$(pwd):$PYTHONPATH
 
@@ -53,6 +55,13 @@ bash /root/workspace/src/util_colmap/run_colmap_pollux.sh --img_path $COLMAP_IMG
 
 print_green "start make normal image"
 normal_DIR="/root/workspace/src/data/$BASENAME/normal"
+pretrained_DIR='/root/workspace/src/submodules/omnidata/pretrained_models'
+
+if [ -d "$pretrained_DIR" ]; then
+  echo "Directory $pretrained_DIR already exist."
+else
+  sh tools/download_surface_normal_models.sh
+fi
 
 # normal_DIR가 존재하는지 확인합니다.
 if [ -d "$normal_DIR" ]; then
@@ -63,9 +72,6 @@ else
 
   # omnidata 하위 폴더로 이동합니다.
   cd /root/workspace/src/submodules/omnidata || { echo "Failed to change directory to /root/workspace/src/submodules/omnidata"; exit 1; }
-
-  # surface normal models를 다운로드합니다.
-  sh tools/download_surface_normal_models.sh
 
   # normal estimation을 실행합니다.
   python estimate_normal.py --img_path $SAVE_DIR
@@ -80,7 +86,7 @@ print_green "Total elapsed time: $elapsed_time seconds"
 print_green "Training Start!"
 
 cd /root/workspace/src
-python train.py -s /root/workspace/src/data/$BASENAME --config ./config/train.yaml --exp_id $BASENAME
+python train.py -s /root/workspace/src/data/$BASENAME --config ./config/train.yaml --exp_id $BASENAME --save_path $SAVE_PATH
 
 # TODO
 # GPU 선택
