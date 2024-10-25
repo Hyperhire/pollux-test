@@ -1,5 +1,6 @@
 # Use the base image with PyTorch and CUDA support
-FROM pytorch/pytorch:1.7.1-cuda11.0-cudnn8-devel
+# FROM pytorch/pytorch:1.7.1-cuda11.0-cudnn8-devel
+FROM pytorch/pytorch:2.0.1-cuda11.7-cudnn8-devel
 
 RUN apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1804/x86_64/3bf863cc.pub
 
