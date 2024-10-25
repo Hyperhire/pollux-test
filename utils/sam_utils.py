@@ -74,8 +74,8 @@ def segmentation_usingSAM(image_path, predictor):
     hight = img.size[1]
 
     # Select points those should be and shouldn't be in the segmentation 
-    input_point = np.array([[width/2, hight*3/5], [width/2, hight*4/5], [width/6, hight/12], [width*5/6, hight/12]])
-    input_label = np.array([1, 1, 0, 0])
+    input_point = np.array([[width/2, hight/2], [width/12, hight/12], [width*11/12, hight*11/12],  [width*11/12, hight/12], [width/12, hight*11/12]])
+    input_label = np.array([1, 0, 0, 0, 0])
 
     # visualize the selection points
     #plt.figure (figsize=(10,10))
