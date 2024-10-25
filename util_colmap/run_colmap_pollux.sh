@@ -28,27 +28,33 @@ fi
 
 cd ${DATA_PATH}
 
-# colmap feature_extractor \
-#     --image_path $IMG_PATH \
-#     --database_path database.db
+colmap feature_extractor \
+    --image_path $IMG_PATH \
+    --database_path database.db
 
-# colmap exhaustive_matcher \
-#     --database_path database.db
+colmap exhaustive_matcher \
+    --database_path database.db
 
-# SPARSE_DIR=${DATA_PATH}/sparse
-# if [ ! -d ${SPARSE_DIR} ]; then
-#     mkdir -p ${SPARSE_DIR}
-# fi
+SPARSE_DIR=${DATA_PATH}/sparse
+if [ ! -d ${SPARSE_DIR} ]; then
+    mkdir -p ${SPARSE_DIR}
+fi
 
-# colmap mapper \
-#     --database_path database.db \
-#     --image_path $IMG_PATH \
-#     --output_path $DATA_PATH/sparse
-colmap automatic_reconstructor \
-        --workspace_path $DATA_PATH \
-        --image_path $IMG_PATH \
-        --sparse 1 \
-        --dense 0
+colmap mapper \
+    --database_path database.db \
+    --image_path $IMG_PATH \
+    --output_path $DATA_PATH/sparse \
+    --Mapper.ba_refine_extra_params=0 \
+    --Mapper.ba_refine_focal_length=0 \
+    --Mapper.ba_refine_principal_point=0
+# colmap automatic_reconstructor \
+#         --workspace_path $DATA_PATH \
+#         --image_path $IMG_PATH \
+#         --sparse 1 \
+#         --dense 0 \
+#         --Mapper.ba_refine_extra_params=0 \
+#         --Mapper.ba_refine_focal_length=0 \
+#         --Mapper.ba_refine_principal_point=0
 
 
 # python3 /root/workspace/src/util_colmap/bin_to_txt_pollux.py ${SPARSE_DIR}/0
