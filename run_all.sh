@@ -28,6 +28,28 @@ print_green "SAVE_PATH: $SAVE_PATH"
 
 export PYTHONPATH=$(pwd):$PYTHONPATH
 
+# COLMAP
+if ! command -v colmap &> /dev/null
+then
+    echo "COLMAP X"
+    bash /root/workspace/src/install_colmap.sh
+else
+    echo "COLMAP이 이미 설치되어 있습니다."
+fi
+
+# SAM
+TARGET_DIR="/root/workspace/src/utils"
+FILE_NAME="sam_vit_h_4b8939.pth"
+URL="https://dl.fbaipublicfiles.com/segment_anything/sam_vit_h_4b8939.pth"
+
+# 파일 존재 여부 확인
+if [ ! -f "$TARGET_DIR/$FILE_NAME" ]; then
+  echo "SAM File not found. Downloading $FILE_NAME to $TARGET_DIR..."
+  wget -P "$TARGET_DIR" "$URL"
+else
+  echo "SAM File already exists in $TARGET_DIR."
+fi
+
 print_green "Running sam_utils.py with --seq_name $SEQ_NAME and --frame_num \"$FRAME_NUM\""
 python /root/workspace/src/utils/sam_utils.py --img_path $SEQ_NAME --frame_num "$FRAME_NUM"
 
