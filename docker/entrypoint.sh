@@ -14,6 +14,9 @@ source ~/.bashrc
 conda init
 source /opt/conda/etc/profile.d/conda.sh
 
+cd /root/workspace/src/
+mkdir -p preprocessing
+
 echo "============== Gaussian Surfels Docker Env Ready================"
 
 exec "$@"
