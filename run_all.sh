@@ -31,25 +31,25 @@ export PYTHONPATH=$(pwd):$PYTHONPATH
 # COLMAP
 if ! command -v colmap &> /dev/null
 then
-    echo "COLMAP X"
+    print_green "COLMAP X"
     bash /root/workspace/src/install_colmap.sh
 else
-    echo "COLMAP이 이미 설치되어 있습니다."
+    print_green "COLMAP is already installed."
 fi
 
-# SAM
-TARGET_DIR="/root/workspace/src/utils"
+# SAM pretrained model download
+TARGET_DIR="/root/workspace/src"
 FILE_NAME="sam_vit_h_4b8939.pth"
 URL="https://dl.fbaipublicfiles.com/segment_anything/sam_vit_h_4b8939.pth"
 
-# 파일 존재 여부 확인
 if [ ! -f "$TARGET_DIR/$FILE_NAME" ]; then
-  echo "SAM File not found. Downloading $FILE_NAME to $TARGET_DIR..."
+  print_green "SAM File not found. Downloading $FILE_NAME to $TARGET_DIR..."
   wget -P "$TARGET_DIR" "$URL"
 else
-  echo "SAM File already exists in $TARGET_DIR."
+  print_green "SAM File already exists in $TARGET_DIR."
 fi
 
+#
 print_green "Running sam_utils.py with --seq_name $SEQ_NAME and --frame_num \"$FRAME_NUM\""
 python /root/workspace/src/utils/sam_utils.py --img_path $SEQ_NAME --frame_num "$FRAME_NUM"
 
@@ -64,6 +64,7 @@ SAVE_DIR="/root/workspace/src/data/$BASENAME/image"
 DEST_DIR="/root/workspace/src/data/$BASENAME"
 mkdir -p "$SAVE_DIR"
 mkdir -p "$DEST_DIR/binary_mask"
+mkdir -p "/root/workspace/src/test"
 
 cp -r "$RESULT_IMG_PATH/"* "$SAVE_DIR/"
 cp -r "$MASK_IMG_PATH/"* "$DEST_DIR/binary_mask/"
@@ -96,7 +97,7 @@ else
   cd /root/workspace/src/submodules/omnidata || { echo "Failed to change directory to /root/workspace/src/submodules/omnidata"; exit 1; }
 
   # normal estimation을 실행합니다.
-  python estimate_normal.py --img_path $SAVE_DIR
+  python estimate_normal.py --img_path "$SAVE_DIR"
 fi
 
 end_time=$(date +%s)

@@ -9,7 +9,7 @@ from utils.image_utils import resize_image
 import os
 import torch.nn.functional as F
 from PIL import Image
-from segment_anything.segment_anything import sam_model_registry, SamPredictor
+from segment_anything import sam_model_registry, SamPredictor
 
 
 def load_mask_image(mask_path, iteration, resolution):
