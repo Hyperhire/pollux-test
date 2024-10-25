@@ -68,7 +68,7 @@ conda env create --file environment.yml
 conda init
 ```
 ```shell
-source /opt/anaconda/etc/profile.d/conda.sh
+source /opt/conda/etc/profile.d/conda.sh
 ```
 를 해주셔야 activate을 할 수 있습니다.
 
