@@ -20,3 +20,4 @@ submodules/omnidata/pretrained_models
 ChamferDistancePytorch
 segment_anything
 *.pth
+*.pyc

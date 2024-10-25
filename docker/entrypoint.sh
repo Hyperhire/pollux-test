@@ -15,7 +15,7 @@ conda init
 source /opt/conda/etc/profile.d/conda.sh
 
 cd /root/workspace/src/
-mkdir -p preprocessing
+mkdir -p preprocessing/input_video
 
 echo "============== Gaussian Surfels Docker Env Ready================"
 

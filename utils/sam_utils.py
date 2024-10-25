@@ -9,7 +9,7 @@ from utils.image_utils import resize_image
 import os
 import torch.nn.functional as F
 from PIL import Image
-from segment_anything.segment_anything import sam_model_registry, SamPredictor
+from segment_anything import sam_model_registry, SamPredictor
 import argparse
 from tqdm import tqdm
 
@@ -23,7 +23,7 @@ def frame_video(video_name):
     
     # Check if camera opened successfully
     if not cap.isOpened():
-        print(f"Error: Could not open video in {video_path}.")
+        print(f"Error: Could not open video in {video_path}")
         return
     print(f"Video in {video_path} was opened")
 
