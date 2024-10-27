@@ -49,23 +49,9 @@ else
   print_green "SAM File already exists in $TARGET_DIR."
 fi
 
-# conda init
-# source /opt/conda/etc/profile.d/conda.sh
-
-# conda deactivate
-
-# conda init
-source /opt/conda/etc/profile.d/conda.sh
-conda activate lsam
-
-print_green "Current Conda environment: $CONDA_DEFAULT_ENV"
-
+#
 print_green "Running sam_utils.py with --seq_name $SEQ_NAME and --frame_num \"$FRAME_NUM\""
-python /root/workspace/src/utils/langsam_utils.py --img_path $SEQ_NAME --frame_num "$FRAME_NUM"
-
-source /opt/conda/etc/profile.d/conda.sh
-conda activate gaussian_surfels
-print_green "Current Conda environment: $CONDA_DEFAULT_ENV"
+python /root/workspace/src/utils/sam_utils.py --img_path $SEQ_NAME --frame_num "$FRAME_NUM"
 
 # .mp4 제거해줘야 함.
 BASENAME="${SEQ_NAME%.*}"
@@ -93,14 +79,11 @@ bash /root/workspace/src/util_colmap/run_colmap_pollux.sh --img_path $COLMAP_IMG
 print_green "start make normal image"
 normal_DIR="/root/workspace/src/data/$BASENAME/normal"
 pretrained_DIR='/root/workspace/src/submodules/omnidata/pretrained_models'
-pretrainedbef_DIR='/root/workspace/src/submodules/omnidata'
 
 if [ -d "$pretrained_DIR" ]; then
   echo "Directory $pretrained_DIR already exist."
 else
-  cd "$pretrainedbef_DIR"
-  mkdir -p pretrained_models
-  sh /root/workspace/src/submodules/omnidata/tools/download_surface_normal_models.sh
+  sh tools/download_surface_normal_models.sh
 fi
 
 # normal_DIR가 존재하는지 확인합니다.

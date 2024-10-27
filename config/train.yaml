@@ -1,7 +1,7 @@
 log:
-  datetime: '2024-07-01 18:29:37'
-  last_train_id: c88bdd77-bbackground100
-  saved_path: ./output/test702/jun_background_100_c88bdd77-bbackground100
+  datetime: '2024-10-28 06:24:40'
+  last_train_id: 7fd157da-3man11
+  saved_path: ./output/1029/man11_7fd157da-3man11
 param:
   pad: 8
   prune_after_iteration: 29000
