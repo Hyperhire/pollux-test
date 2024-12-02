@@ -23,6 +23,9 @@ def load_mask_image(mask_path, iteration, resolution):
         binary_mask = np.load(file_path)
         binary_mask = binary_mask.astype(np.uint8)
 
+        if binary_mask.ndim == 2: # to 3
+            binary_mask = np.repeat(binary_mask[:, :, np.newaxis], 3, axis=2)
+
         orig_h, orig_w, _ = binary_mask.shape
 
         new_resolution = (round(orig_h / resolution), round(orig_w / resolution))
@@ -37,7 +40,7 @@ def load_mask_image(mask_path, iteration, resolution):
 
 def load_dilated_mask_image(mask_path, iteration, resolution):
 
-    padding_goal = 2 # defualt=12 the whole image size is 720*1200
+    padding_goal = 16 # defualt=12 the whole image size is 720*1200
 
     padding_size = int(padding_goal/resolution)
 
@@ -53,6 +56,8 @@ def load_dilated_mask_image(mask_path, iteration, resolution):
         binary_mask = np.load(file_path)
         binary_mask = binary_mask.astype(np.uint8)
 
+        if binary_mask.ndim == 2: # to 3
+            binary_mask = np.repeat(binary_mask[:, :, np.newaxis], 3, axis=2)
         orig_h, orig_w, _ = binary_mask.shape
 
         new_resolution = (round(orig_h / resolution), round(orig_w / resolution))

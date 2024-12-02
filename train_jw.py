@@ -97,9 +97,10 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             scale_num = int(scale)
             viewpoint_cam_temp = scene.getTrainCameras(scale_num)[iter]
             dilated_mask = load_mask_image(mask_path=args.mask_path, iteration=viewpoint_cam_temp.image_name, resolution=scale_num)
-            dilated_mask_per_scale[f'{scale}'][viewpoint_cam_temp.image_name]=dilated_mask
+            dilated_mask_per_scale[f'{scale}'][viewpoint_cam_temp.image_name]=dilated_mask.cuda()
+    # import pdb; pdb.set_trace()
     #=========================================================================================
-
+    
 
     viewpoint_stack = None
     ema_loss_for_log = 0.0

@@ -11,20 +11,22 @@ while [[ "$#" -gt 0 ]]; do
         --seq_name) SEQ_NAME="$2"; shift ;;
         --frame_num) FRAME_NUM="$2"; shift ;;
         --save_path) SAVE_PATH="$2"; shift ;;
+        --type) INPUT_TYPE="$2"; shift ;;
         *) echo "Unknown parameter passed: $1"; exit 1 ;;
     esac
     shift
 done
 
-if [ -z "$SEQ_NAME" ] || [ -z "$FRAME_NUM" ] || [ -z "$SAVE_PATH" ]; then
+if [ -z "$SEQ_NAME" ] || [ -z "$FRAME_NUM" ] || [ -z "$SAVE_PATH" ] || [ -z "$INPUT_TYPE" ]; then
     echo "Error: Missing required arguments."
-    echo "Usage: bash run_all.sh --img_path <img_path> --frame_num \"<frame_num>\""
+    echo "Usage: bash run_all.sh --img_path <img_path> --frame_num \"<frame_num>\" --type <input_type>"
     exit 1
 fi
 
 print_green "SEQ_NAME: $SEQ_NAME"
 print_green "FRAME_NUM: $FRAME_NUM"
 print_green "SAVE_PATH: $SAVE_PATH"
+print_green "INPUT_TYPE: $INPUT_TYPE"
 
 export PYTHONPATH=$(pwd):$PYTHONPATH
 
@@ -49,9 +51,18 @@ else
   print_green "SAM File already exists in $TARGET_DIR."
 fi
 
-#
+# conda init
+source /opt/conda/etc/profile.d/conda.sh
+conda activate lsam
+
+print_green "Current Conda environment: $CONDA_DEFAULT_ENV"
+
 print_green "Running sam_utils.py with --seq_name $SEQ_NAME and --frame_num \"$FRAME_NUM\""
-python /root/workspace/src/utils/sam_utils.py --img_path $SEQ_NAME --frame_num "$FRAME_NUM"
+python /root/workspace/src/utils/langsam_utils_for_image.py --img_path $SEQ_NAME --frame_num "$FRAME_NUM" --type $INPUT_TYPE
+
+source /opt/conda/etc/profile.d/conda.sh
+conda activate gaussian_surfels
+print_green "Current Conda environment: $CONDA_DEFAULT_ENV"
 
 # .mp4 제거해줘야 함.
 BASENAME="${SEQ_NAME%.*}"
@@ -59,31 +70,52 @@ echo $BASENAME
 
 # 다른 폴더에서 진행
 RESULT_IMG_PATH="/root/workspace/src/preprocessing/white_background_frames/$BASENAME"
+RESULT_SAM_IMG_PATH="/root/workspace/src/preprocessing/segmented_frames/$BASENAME"
 MASK_IMG_PATH="/root/workspace/src/preprocessing/segmented_frames/$BASENAME/binary_mask"
+INPUT_IMG_PATH="/root/workspace/src/preprocessing/input_image/$BASENAME"
 SAVE_DIR="/root/workspace/src/data/$BASENAME/image"
+
 DEST_DIR="/root/workspace/src/data/$BASENAME"
+DEST_DIR_SPARSE="/root/workspace/src/data/$BASENAME/sparse"
+
 mkdir -p "$SAVE_DIR"
 mkdir -p "$DEST_DIR/binary_mask"
 mkdir -p "/root/workspace/src/test"
 
-cp -r "$RESULT_IMG_PATH/"* "$SAVE_DIR/"
+# cp -r "$RESULT_IMG_PATH/"* "$SAVE_DIR/"
+cp -r "$INPUT_IMG_PATH/"* "$SAVE_DIR/"
 cp -r "$MASK_IMG_PATH/"* "$DEST_DIR/binary_mask/"
 
 print_green "COLMAP_IMG_PATH: $DEST_DIR"
 
 COLMAP_IMG_PATH=$DEST_DIR
 
-print_green "Running run_colmap_pollux.sh with --img_path $COLMAP_IMG_PATH"
-bash /root/workspace/src/util_colmap/run_colmap_pollux.sh --img_path $COLMAP_IMG_PATH
+if [ ! -d "$DEST_DIR_SPARSE" ]; then # not exist
+  print_green "Running run_colmap_pollux.sh with --img_path $COLMAP_IMG_PATH"
+  bash /root/workspace/src/util_colmap/run_colmap_pollux.sh --img_path $COLMAP_IMG_PATH
+fi
+
+#after colmap, copy white background image to save_dir
+# delete saved_dir's existing image
+rm -rf "$SAVE_DIR/*"
+mkdir -p "$SAVE_DIR"
+cp -r "$RESULT_IMG_PATH/"* "$SAVE_DIR/"
 
 print_green "start make normal image"
 normal_DIR="/root/workspace/src/data/$BASENAME/normal"
 pretrained_DIR='/root/workspace/src/submodules/omnidata/pretrained_models'
+pretrained_model_dir='omnidata_dpt_normal_v2.ckpt'
+TOTAL_MORMAL_DIR=$pretrained_DIR/$pretrained_model_dir
+echo $TOTAL_MORMAL_DIR
 
-if [ -d "$pretrained_DIR" ]; then
-  echo "Directory $pretrained_DIR already exist."
+pretrainedbef_DIR='/root/workspace/src/submodules/omnidata'
+
+if [ -f "$TOTAL_MORMAL_DIR" ]; then
+  echo "Directory $TOTAL_MORMAL_DIR already exist."
 else
-  sh tools/download_surface_normal_models.sh
+  cd "$pretrainedbef_DIR"
+  mkdir -p pretrained_models
+  sh /root/workspace/src/submodules/omnidata/tools/download_surface_normal_models.sh
 fi
 
 # normal_DIR가 존재하는지 확인합니다.

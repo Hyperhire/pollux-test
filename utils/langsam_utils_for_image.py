@@ -8,7 +8,7 @@ from PIL import Image
 # from segment_anything import sam_model_registry, SamPredictor
 import argparse
 from tqdm import tqdm
-
+import shutil
 main_img_root = '/root/workspace/src/preprocessing'
 
 # Framing video to images
@@ -63,23 +63,28 @@ def show_points(coords, labels, ax, marker_size=375):
 
 # Background segmentation function for one image (input: image_path), this function segemnts the feature that contains the center point in the image.
 from lang_sam import LangSAM
-model = LangSAM()
-def segmentation_usingLangSAM(image_path):
+from scipy.ndimage import binary_dilation
 
+model = LangSAM()
+
+def segmentation_usingLangSAM(image_path, offset=1):
     image_pil = Image.open(image_path).convert("RGB")
-    text_prompt = "cloth."
+    text_prompt = "person."
     results = model.predict([image_pil], [text_prompt])
+
+    if len(results[0]['masks']) == 0:
+        return None, None, None
 
     mask = results[0]['masks'][0]
 
+    # Apply offset to the mask using binary dilation
     result_mask = (mask > 0.5).astype(np.uint8)
+    result_mask = binary_dilation(result_mask, iterations=offset).astype(np.uint8)
 
     image_np = np.array(image_pil)
-
     result_image_np = image_np * result_mask[:, :, np.newaxis]
 
     result_mask = np.repeat(result_mask[:, :, np.newaxis], 3, axis=2)
-
     result_image = Image.fromarray(result_image_np)
 
     mask_3d = np.repeat(mask[:, :, np.newaxis], 1, axis=2)
@@ -140,19 +145,25 @@ def segment_frames_from_video(video_name, frame_num = 150):
     files =os.listdir(input_folder)
     sorted_files = sorted(files, key=str.lower)
 
-    per_frame = int(len(sorted_files)/int(frame_num))
+    # per_frame = int(len(sorted_files)/int(frame_num))
     count = 0
     mask_size_threshold = 500
     # for filename in sorted(sorted_files):
     for filename in tqdm(sorted_files, desc="Segmenting frames"):
-        if count % per_frame == 0 & filename.lower().endswith(('.png', '.jpg', '.jpeg')):
+        if filename.lower().endswith(('.png', '.jpg', '.jpeg')):
             input_path = os.path.join(input_folder, filename)
             # result_img, mask_img, mask = segmentation_usingSAM(input_path, predictor)
             result_img, mask_img, mask = segmentation_usingLangSAM(input_path)
-            mask_size = np.sum(mask)
-            if mask_size >= mask_size_threshold:
-                result_img.save(os.path.join(save_dir, filename))
-                np.save(os.path.join(binary_mask_dir, 'binary_mask_' + filename.split('.')[0] + '.npy'), mask)
+
+            if mask is not None:
+                mask_size = np.sum(mask)
+                if mask_size >= mask_size_threshold:
+                    result_img.save(os.path.join(save_dir, filename))
+                    # import pdb; pdb.set_trace()
+                    # mask : (1280, 720, 3) -> (1280, 720, 1)
+                    mask = mask[:, :, 0]
+
+                    np.save(os.path.join(binary_mask_dir, 'binary_mask_' + filename.split('.')[0] + '.npy'), mask)
         count+=1
     print("Frame segmentation is completed. All frames are segmented and image, masks are saved.")
 
@@ -176,7 +187,9 @@ def white_background_frames(video_name):
             if os.path.exists(mask_path):
                 img = Image.open(input_path).convert("RGB")
                 mask_3d = np.load(mask_path)
-                # mask_3d = np.repeat(mask_3d[:, :, np.newaxis], 3, axis=2)
+                mask_3d = np.repeat(mask_3d[:, :, np.newaxis], 3, axis=2)
+
+                # import pdb; pdb.set_trace()
                 
                 # Create white background
                 white_background = np.ones_like(np.array(img)) * 255
@@ -188,12 +201,81 @@ def white_background_frames(video_name):
                 result_img = Image.fromarray(result.astype(np.uint8))
                 result_img.save(os.path.join(save_dir, filename))
 
+# def get_images(img_path):
+#     image_path = os.path.join(main_img_root, "input_image", img_path)
+#     files = os.listdir(image_path)
+#     sorted_files = sorted(files, key=str.lower)
+#     resize_size = (1280, 720)
+    
+#     # Resize images in image_path to resize_size
+#     # 3456 × 5184 -> 720 × 1280
+#     for file in sorted_files:
+#         img = Image.open(os.path.join(image_path, file))
+#         img_resized = img.resize(resize_size, Image.LANCZOS)
+#         img_resized.save(os.path.join(image_path, file))
+    
+#     # save images in frames_from_video
+#     save_dir = os.path.join(main_img_root, "frames_from_video", img_path)
+#     if not os.path.exists(save_dir):
+#         os.makedirs(save_dir)
+#     for file in sorted_files:
+#         shutil.copy(os.path.join(image_path, file), os.path.join(save_dir, file))
+
+#     # import pdb; pdb.set_trace()
+
+#     return sorted_files
+from PIL import Image, ExifTags
+def get_images(img_path):
+    image_path = os.path.join(main_img_root, "input_image", img_path)
+    files = os.listdir(image_path)
+    sorted_files = sorted(files, key=str.lower)
+    resize_size = (1280, 1920)
+    
+    # Resize images in image_path to resize_size
+    #
+    for file in tqdm(sorted_files, desc="Resizing images"):
+        img = Image.open(os.path.join(image_path, file))
+
+        # Correct image orientation based on EXIF data
+        try:
+            exif = img._getexif()
+            if exif:
+                for tag, value in ExifTags.TAGS.items():
+                    if value == 'Orientation':
+                        orientation = exif.get(tag)
+                        if orientation == 3:
+                            img = img.rotate(180, expand=True)
+                        elif orientation == 6:
+                            img = img.rotate(270, expand=True)
+                        elif orientation == 8:
+                            img = img.rotate(90, expand=True)
+                        break
+        except Exception as e:
+            print(f"Error handling EXIF for {file}: {e}")
+
+        # Resize and save the image
+        img_resized = img.resize(resize_size, Image.LANCZOS)
+        img_resized.save(os.path.join(image_path, file))
+    
+    # Save images in frames_from_video
+    save_dir = os.path.join(main_img_root, "frames_from_video", img_path)
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir)
+    for file in sorted_files:
+        shutil.copy(os.path.join(image_path, file), os.path.join(save_dir, file))
+
+    return sorted_files
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Segment objects in an image using SAM.")
     parser.add_argument("--img_path", type=str, required=True, help="Path to the input video.")
     parser.add_argument("--frame_num", type=str, required=True, help="Number of image frames.")
+    parser.add_argument("--type", type=str, required=True, help="input type")
     
     args = parser.parse_args()
-    frame_video(args.img_path)
+    # frame_video(args.img_path)
+
+    get_images(args.img_path)
     segment_frames_from_video(args.img_path, args.frame_num)
     white_background_frames(args.img_path)

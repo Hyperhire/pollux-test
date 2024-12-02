@@ -30,7 +30,9 @@ cd ${DATA_PATH}
 
 colmap feature_extractor \
     --image_path $IMG_PATH \
-    --database_path database.db
+    --database_path database.db \
+    --ImageReader.camera_model PINHOLE \
+    --SiftExtraction.max_num_features 30000
 
 colmap exhaustive_matcher \
     --database_path database.db
@@ -46,7 +48,8 @@ colmap mapper \
     --output_path $DATA_PATH/sparse \
     --Mapper.ba_refine_extra_params=0 \
     --Mapper.ba_refine_focal_length=0 \
-    --Mapper.ba_refine_principal_point=0
+    --Mapper.ba_refine_principal_point=0 \
+    --Mapper.ba_local_max_refinements=5
 # colmap automatic_reconstructor \
 #         --workspace_path $DATA_PATH \
 #         --image_path $IMG_PATH \
