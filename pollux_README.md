@@ -12,6 +12,7 @@
 4. [Trouble Shooting](#trouble-shooting)
     - [Docker Permission](#docker-permission)
     - [VSCode에서 코드 저장이 안되는 이유](#vscode에서-코드-저장이-안되는-이유)
+5. [Langsam Installation](#langsam-installation)
 
 ## Requirements
 NVIDIA-DRIVER <br>
@@ -26,11 +27,19 @@ docker_init
 docker start sf12
 docker exec -it sf12 /bin/bash
 ```
+
+### video의 경우
 ```
 # mp4 file is in `./preprocessing/input_video/`
 CUDA_VISIBLE_DEVICES=1 bash run_all.sh --seq_name video_sample_LSJ_test.mp4 --frame_num 150 --save_path ./output/0700
 ```
 
+### image의 경우 (12월 2일 기준)
+preprocessing/input_image/ 경로에 이미지 파일을 넣어주세요.
+```
+bash run_exc.sh # 설정 후 실행
+```
+docker 환경, conda 환경 **2개**가 모두 설정되어야합니다.  
 
 ## Environment Setting
 ### 1. 빈 Docker image & Container 제작
@@ -80,6 +89,12 @@ conda activate gaussian_surfels
 cd submodules/diff-gaussian-rasterization
 python setup.py install && pip install .
 ```
+```shell
+bash /root/workspace/src/install_colmap.sh
+```
+```
+pip install pytorch_lightning
+```
 
 ### 3. Omnidata
 ```sh
@@ -123,3 +138,17 @@ git clone이나 git pull은 container밖에서 진행하시는 것이 좋습니�
 <br><br>
 **해결 방법**: 위 경우로 진행하기 어려운 경우, chmod 777을 사용하여 관리자 권한을 빼주면 됩니다.<br>
 docker container내에서 저장이 안되는 파일을 `chmod 777 utils/ours.txt` 이런식으로 명령어를 주면 됩니다.
+
+## Langsam Installation
+```
+conda create -n lsam python=3.11
+```
+```
+conda activate lsam
+```
+```
+pip install torch==2.4.1 torchvision==0.19.1 --extra-index-url https://download.pytorch.org/whl/cu124
+```
+```
+pip install -U git+https://github.com/luca-medeiros/lang-segment-anything.git
+```
